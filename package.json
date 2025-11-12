@@ -1,0 +1,26 @@
+{
+  "name": "saint-seiya-game",
+  "version": "1.0.0",
+  "description": "Mini juego 2D de Saint Seiya en React + TypeScript",
+  "main": "src/index.tsx",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^5.1.1",
+    "typescript": "^5.0.0",
+    "vite": "^4.0.0"
+  }
+}
