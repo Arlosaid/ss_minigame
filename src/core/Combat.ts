@@ -62,19 +62,32 @@ export class CombatSystem {
     enemies: Enemy[],
     attackRange: number = 300
   ): Enemy | null {
-    if (enemies.length === 0) return null;
+    console.log(`[findNearestEnemy] Recibido: ${enemies.length} enemigos, rango: ${attackRange}px`);
+    
+    if (enemies.length === 0) {
+      console.log('[findNearestEnemy] ❌ Array de enemigos vacío');
+      return null;
+    }
 
     let nearestEnemy: Enemy | null = null;
     let minDistance = attackRange; // Solo consideramos enemigos dentro del rango
 
     for (const enemy of enemies) {
       const distance = this.calculateDistance(player, enemy);
+      console.log(`[findNearestEnemy] Enemigo ${enemy.id} en (${enemy.x.toFixed(1)}, ${enemy.y.toFixed(1)}) - Distancia: ${distance.toFixed(1)}px`);
       
       // Solo consideramos enemigos dentro del rango de ataque
       if (distance <= attackRange && distance < minDistance) {
         minDistance = distance;
         nearestEnemy = enemy;
+        console.log(`[findNearestEnemy] ✅ Nuevo enemigo más cercano: ${enemy.id} a ${distance.toFixed(1)}px`);
       }
+    }
+
+    if (nearestEnemy) {
+      console.log(`[findNearestEnemy] 🎯 Retornando enemigo ${nearestEnemy.id} a ${minDistance.toFixed(1)}px`);
+    } else {
+      console.log(`[findNearestEnemy] ❌ NO hay enemigos dentro del rango de ${attackRange}px`);
     }
 
     return nearestEnemy;

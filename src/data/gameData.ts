@@ -33,9 +33,9 @@ export const BRONZE_KNIGHTS: Knight[] = [
     color: '#FF4444',
     projectileColor: '#FFD700',
     attack: 'Meteoros de Pegaso',
-    speed: 3,
-    fireRate: 1500,
-    damage: 12
+    speed: 3.5, // Aumentado de 3
+    fireRate: 800, // Reducido de 1500 (más rápido)
+    damage: 18 // Aumentado de 12
   },
   {
     id: 'dragon',
@@ -77,9 +77,9 @@ export const GOLD_SAINTS: GoldSaint[] = [
 
 // Mejoras con bonos mejorados
 export const UPGRADES: Upgrade[] = [
-  { id: 'damage', name: 'Cosmos Aumentado', desc: '+20% Daño por nivel', icon: '⚡', levels: [20, 40, 65, 95, 130] },
+  { id: 'damage', name: 'Cosmos Aumentado', desc: '+3 Daño por nivel', icon: '⚡', levels: [3, 6, 10, 15, 20] },
   { id: 'speed', name: 'Velocidad Divina', desc: '+25% Velocidad por nivel', icon: '💨', levels: [0.75, 1.5, 2.3, 3.2, 4.0] },
-  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Dispara más rápido', icon: '🔥', levels: [180, 340, 510, 700, 900] },
+  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Dispara más rápido (-80ms)', icon: '🔥', levels: [80, 160, 240, 320, 400] },
   { id: 'multiShot', name: 'Meteoros Múltiples', desc: 'Dispara proyectiles adicionales', icon: '✨', levels: [1, 2, 3, 4, 5] },
   { id: 'pierce', name: 'Penetración Cósmica', desc: '+30% Rango por nivel', icon: '🎯', levels: [1, 2, 3, 4, 5] },
   { id: 'maxHealth', name: 'Armadura Divina', desc: '+75 HP Máximo por nivel', icon: '💚', levels: [75, 150, 225, 300, 375] },

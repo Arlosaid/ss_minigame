@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Knight, GoldSaint, Upgrade } from '../data/gameData';
 import { BRONZE_KNIGHTS, GOLD_SAINTS, UPGRADES } from '../data/gameData';
-import { createPlayerSprite, AnimatedSprite } from '../systems/SpriteSystem';
+import { createPlayerSprite, createEnemySprite, createBossSprite, AnimatedSprite } from '../systems/SpriteSystem';
 import { CombatSystem } from '../core/Combat';
 
 const WIDTH = 800; // Tamaño del viewport (lo que se ve en pantalla)
@@ -17,10 +17,6 @@ interface Player {
   maxHealth: number;
   cosmos: number; // Energía Cósmica (reemplaza exp)
   level: number;
-  combo: number;
-  comboTimer: number;
-  magnetActive: boolean; // Estado del efecto magnético
-  magnetDuration: number; // Duración restante del magnet en segundos
 }
 
 interface Enemy {
@@ -33,6 +29,7 @@ interface Enemy {
   type: 'normal' | 'fast' | 'tank';
   angle: number;
   cosmosValue: number; // Cantidad de cosmos que dropea
+  sprite?: AnimatedSprite; // Sprite del enemigo
 }
 
 interface Boss {
@@ -43,7 +40,10 @@ interface Boss {
   maxHealth: number;
   gold: GoldSaint;
   lastAttack: number;
+  lastSuperAttack: number; // Tracker para super ataque cada 10s
   phase: number;
+  sprite?: AnimatedSprite; // Sprite del boss
+  isAttacking?: boolean; // Estado de ataque
 }
 
 interface Projectile {
@@ -54,7 +54,6 @@ interface Projectile {
   dy: number;
   damage: number;
   color: string;
-  pierce: number;
   isEnemy: boolean;
   angle: number;
 }
@@ -64,7 +63,7 @@ interface Drop {
   x: number;
   y: number;
   value: number;
-  type: 'cosmos' | 'health' | 'magnet'; // Tipos de drops
+  type: 'cosmos' | 'health'; // Tipos de drops
   lifetime: number; // Tiempo de vida en segundos
 }
 
@@ -82,13 +81,48 @@ interface PlayerUpgrades {
   speed: number;
   fireRate: number;
   multiShot: number;
-  pierce: number;
-  maxHealth: number; // Nuevo upgrade
+  maxHealth: number;
   explosion: number;
 }
 
+interface BossAttackEffect {
+  id: number;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  createdAt: number;
+  duration: number;
+  angle: number;
+  scale: number;
+}
+
+interface BossSuperAttackWarning {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle: number;
+  createdAt: number;
+  warningDuration: number;
+  executionTime: number;
+}
+
+interface BossSuperAttack {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle: number;
+  damage: number;
+  createdAt: number;
+  duration: number;
+}
+
 const SaintSeiyaGame: React.FC = () => {
-  const [gameStarted, setGameStarted] = useState(false);
+  const [gameStarted] = useState(true);
   const [player, setPlayer] = useState<Player | null>(null);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [boss, setBoss] = useState<Boss | null>(null);
@@ -107,12 +141,17 @@ const SaintSeiyaGame: React.FC = () => {
     speed: 0,
     fireRate: 0,
     multiShot: 0,
-    pierce: 0,
     maxHealth: 0,
     explosion: 0
   });
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
   const [playerSprite, setPlayerSprite] = useState<AnimatedSprite | null>(null);
+  const [bossSprite, setBossSprite] = useState<AnimatedSprite | null>(null);
+  const [bossAttackImage, setBossAttackImage] = useState<HTMLImageElement | null>(null);
+  const [bossSuperAttackSprites, setBossSuperAttackSprites] = useState<HTMLImageElement[]>([]);
+  const [bossAttackEffects, setBossAttackEffects] = useState<BossAttackEffect[]>([]);
+  const [bossSuperAttackWarnings, setBossSuperAttackWarnings] = useState<BossSuperAttackWarning[]>([]);
+  const [bossSuperAttacks, setBossSuperAttacks] = useState<BossSuperAttack[]>([]);
   const [isAttacking, setIsAttacking] = useState(false);
   const [projectileImage, setProjectileImage] = useState<HTMLImageElement | null>(null);
   const [floorImage, setFloorImage] = useState<HTMLImageElement | null>(null);
@@ -123,20 +162,53 @@ const SaintSeiyaGame: React.FC = () => {
   const stageStartTime = useRef<number>(0);
   const backgroundMusic = useRef<HTMLAudioElement | null>(null);
   const playerRef = useRef<Player | null>(null);
+  const bossRef = useRef<Boss | null>(null);
+  const stageTimeRef = useRef<number>(0);
+  const enemiesRef = useRef<Enemy[]>([]);
+  const projectilesRef = useRef<Projectile[]>([]);
+  const dropsRef = useRef<Drop[]>([]);
+  const spawnWarningsRef = useRef<SpawnWarning[]>([]);
+  const lastCleanupTime = useRef<number>(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
   const nextProjectileId = useRef(0);
   const nextOrbId = useRef(0);
   const nextWarningId = useRef(0);
+  const nextBossEffectId = useRef(0);
+  const nextSuperAttackId = useRef(0);
   const lastFrameTime = useRef<number>(Date.now());
+  const enemySpritePool = useRef<AnimatedSprite[]>([]);
+  const nextSpriteIndex = useRef(0);
   
-  // Mantener playerRef actualizado
+  // Mantener refs actualizados para acceso rápido
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
+  
+  useEffect(() => {
+    bossRef.current = boss;
+  }, [boss]);
+  
+  useEffect(() => {
+    enemiesRef.current = enemies;
+  }, [enemies]);
+  
+  useEffect(() => {
+    projectilesRef.current = projectiles;
+  }, [projectiles]);
+  
+  useEffect(() => {
+    dropsRef.current = drops;
+  }, [drops]);
+  
+  useEffect(() => {
+    spawnWarningsRef.current = spawnWarnings;
+  }, [spawnWarnings]);
 
-  const selectKnight = async (knight: Knight) => {
+  const initializeGame = async () => {
+    // Usar el primer caballero por defecto (Seiya)
+    const knight = BRONZE_KNIGHTS[0]!;
     const initialX = MAP_WIDTH / 2;
     const initialY = MAP_HEIGHT / 2;
     
@@ -147,14 +219,14 @@ const SaintSeiyaGame: React.FC = () => {
       health: 100,
       maxHealth: 100,
       cosmos: 0,
-      level: 1,
-      combo: 0,
-      comboTimer: 0,
-      magnetActive: false,
-      magnetDuration: 0
+      level: 1
     });
     
-    setGameStarted(true);
+    // Inicializar cámara centrada en el jugador
+    const camX = Math.max(0, Math.min(MAP_WIDTH - WIDTH, initialX - WIDTH / 2));
+    const camY = Math.max(0, Math.min(MAP_HEIGHT - HEIGHT, initialY - HEIGHT / 2));
+    setCamera({ x: camX, y: camY });
+    
     setCurrentHouse(0);
     setWaveEnemies(100); // Número alto para modo survival continuo
     setWaveKills(0);
@@ -178,6 +250,21 @@ const SaintSeiyaGame: React.FC = () => {
       setPlayerSprite(sprite);
       console.log('Player sprite loaded');
       
+      // Precargar pool de sprites de enemigos (30 sprites reutilizables)
+      console.log('Preloading enemy sprite pool...');
+      const enemyPool: AnimatedSprite[] = [];
+      for (let i = 0; i < 30; i++) {
+        const enemySprite = await createEnemySprite();
+        enemyPool.push(enemySprite);
+      }
+      enemySpritePool.current = enemyPool;
+      console.log('Enemy sprite pool loaded:', enemyPool.length);
+      
+      // Cargar sprite del boss
+      const bSprite = await createBossSprite();
+      setBossSprite(bSprite);
+      console.log('Boss sprite loaded');
+      
       // Cargar sprite de proyectil
       const projImg = new Image();
       projImg.onload = () => {
@@ -188,6 +275,34 @@ const SaintSeiyaGame: React.FC = () => {
         console.error('Failed to load projectile sprite');
       };
       projImg.src = '/sprites/attacks/attack_1.png';
+      
+      // Cargar sprite de ataque del boss
+      const bossAttackImg = new Image();
+      bossAttackImg.onload = () => {
+        setBossAttackImage(bossAttackImg);
+        console.log('Boss attack sprite loaded');
+      };
+      bossAttackImg.onerror = () => {
+        console.error('Failed to load boss attack sprite');
+      };
+      bossAttackImg.src = '/sprites/attacks/boss_attack.png';
+      
+      // Cargar sprites de super ataque del boss (animación de 3 frames)
+      const superAttackSprites: HTMLImageElement[] = [];
+      for (let i = 1; i <= 3; i++) {
+        const img = new Image();
+        img.src = `/sprites/attacks/boss_super_attack${i}.png`;
+        img.onload = () => {
+          console.log(`Boss super attack sprite ${i} loaded`);
+          if (i === 3) {
+            setBossSuperAttackSprites([...superAttackSprites]);
+          }
+        };
+        img.onerror = () => {
+          console.error(`Failed to load boss super attack sprite ${i}`);
+        };
+        superAttackSprites.push(img);
+      }
       
       // Cargar imagen del floor
       const floorImg = new Image();
@@ -200,9 +315,15 @@ const SaintSeiyaGame: React.FC = () => {
       };
       floorImg.src = '/sprites/stages/floor_1_stage.png';
     } catch (error) {
-      console.error('Failed to load player sprite:', error);
+      console.error('Failed to load sprites:', error);
     }
   };
+
+  // Inicializar el juego automáticamente al montar el componente
+  useEffect(() => {
+    initializeGame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const spawnBoss = useCallback(() => {
     if (currentHouse >= GOLD_SAINTS.length) return;
@@ -216,56 +337,98 @@ const SaintSeiyaGame: React.FC = () => {
       maxHealth: 500 + currentHouse * 200,
       gold,
       lastAttack: 0,
-      phase: 1
+      lastSuperAttack: 0,
+      phase: 1,
+      sprite: bossSprite || undefined,
+      isAttacking: false
     });
     setGameState('playing');
     setWaveNumber(1);
     setStageTime(0);
     stageStartTime.current = Date.now();
-  }, [currentHouse]);
+  }, [currentHouse, bossSprite]);
+
+  const dropItem = useCallback((x: number, y: number, type: 'cosmos' | 'health', value: number) => {
+    setDrops(prev => [...prev, {
+      id: nextOrbId.current++,
+      x, y, 
+      type,
+      value,
+      lifetime: type === 'health' ? 8 : 15 // Health dura 8s, cosmos 15s
+    }]);
+  }, []);
 
   const shoot = useCallback(() => {
-    if (!player || gameState !== 'playing') return;
+    // Log SIEMPRE al inicio (con throttle para no saturar)
+    if (Math.random() < 0.02) { // 2% de las veces
+      console.log('[SHOOT] 🔫 Función shoot() ejecutada');
+    }
+    
+    const currentPlayer = playerRef.current;
+    if (!currentPlayer) {
+      if (Math.random() < 0.02) console.log('[SHOOT] ❌ No hay currentPlayer');
+      return;
+    }
+    if (gameState !== 'playing') {
+      if (Math.random() < 0.02) console.log('[SHOOT] ❌ GameState no es playing:', gameState);
+      return;
+    }
     
     const now = Date.now();
-    const fireRate = player.knight.fireRate - upgrades.fireRate * 50;
-    if (now - lastShot < fireRate) return;
+    const fireRate = currentPlayer.knight.fireRate - upgrades.fireRate * 50;
+    const cooldownTime = Math.max(200, fireRate);
+    const timeSinceLastShot = now - lastShot;
     
+    if (timeSinceLastShot < cooldownTime) {
+      // No loguear esto cada frame, solo ocasionalmente
+      return;
+    }
+    
+    console.log('[SHOOT] ✅ Cooldown pasado, intentando disparar...');
     setLastShot(now);
     
-    // Configuración del rango de ataque
-    const attackRange = 300; // Rango máximo de ataque en píxeles
+    // Configuración del rango de ataque (más amplio tipo Vampire Survivors)
+    const attackRange = 450; // Rango máximo de ataque en píxeles
     
     // Encontrar el enemigo más cercano usando el CombatSystem
     const nearestEnemy = CombatSystem.findNearestEnemy(
-      { x: player.x, y: player.y },
-      enemies,
+      { x: currentPlayer.x, y: currentPlayer.y },
+      enemiesRef.current,
       attackRange
     );
     
+    console.log(`[SHOOT] Enemigos en array: ${enemiesRef.current.length}, Enemigo más cercano: ${nearestEnemy ? 'SÍ' : 'NO'}`);
+    
     // Determinar el objetivo (enemigo cercano o boss si está cerca)
-    let target: { x: number; y: number } | null = nearestEnemy;
+    let target: { x: number; y: number; id: number } | null = nearestEnemy;
     
     // Si hay un boss, verificar si está en rango y priorizarlo
-    if (boss) {
+    const currentBoss = bossRef.current;
+    if (currentBoss) {
       const bossDist = CombatSystem.calculateDistance(
-        { x: player.x, y: player.y },
-        { x: boss.x, y: boss.y }
+        { x: currentPlayer.x, y: currentPlayer.y },
+        { x: currentBoss.x, y: currentBoss.y }
       );
+      
+      console.log(`[SHOOT] Boss encontrado, distancia: ${bossDist.toFixed(1)}px (rango: ${attackRange}px)`);
       
       if (bossDist <= attackRange) {
         // Si el boss está en rango, priorizarlo
-        target = boss;
+        target = currentBoss;
+        console.log('[SHOOT] ✅ Boss seleccionado como objetivo');
       }
     }
     
     // Si no hay objetivo en rango, NO disparar
     if (!target) {
+      console.log('[SHOOT] ❌ NO HAY OBJETIVO EN RANGO - No se dispara');
       return; // No hay enemigos en rango
     }
     
+    console.log('[SHOOT] 🎯 OBJETIVO ENCONTRADO - Creando proyectiles...');
+    
     // Crear efecto visual de ataque
-    CombatSystem.createAttackEffect({ x: player.x, y: player.y }, target);
+    CombatSystem.createAttackEffect({ x: currentPlayer.x, y: currentPlayer.y }, target);
     
     // Activar animación de ataque
     setIsAttacking(true);
@@ -275,44 +438,34 @@ const SaintSeiyaGame: React.FC = () => {
     const newProjectiles: Projectile[] = [];
     
     // Calcular ángulo base hacia el objetivo
-    const baseAngle = Math.atan2(target.y - player.y, target.x - player.x);
+    const baseAngle = Math.atan2(target.y - currentPlayer.y, target.x - currentPlayer.x);
     
     for (let i = 0; i < shots; i++) {
       // Calcular ángulo individual para cada disparo (spread)
       const angle = shots === 1 ? baseAngle : baseAngle + (i - (shots - 1) / 2) * 0.2;
       
       // Calcular posición inicial del proyectil usando el ángulo individual
-      // Esto asegura que cada proyectil salga del punto correcto del jugador
       const offsetDistance = 25; // Distancia desde el centro del jugador
-      const startX = player.x + Math.cos(angle) * offsetDistance;
-      const startY = player.y + Math.sin(angle) * offsetDistance;
+      const startX = currentPlayer.x + Math.cos(angle) * offsetDistance;
+      const startY = currentPlayer.y + Math.sin(angle) * offsetDistance;
       
+      const projId = nextProjectileId.current++;
       newProjectiles.push({
-        id: nextProjectileId.current++,
+        id: projId,
         x: startX,
         y: startY,
-        dx: Math.cos(angle) * 2.5,
-        dy: Math.sin(angle) * 2.5,
-        damage: player.knight.damage + upgrades.damage,
-        color: player.knight.projectileColor,
-        pierce: 0,
+        dx: Math.cos(angle) * 2.0, // Velocidad reducida para mejor visualización
+        dy: Math.sin(angle) * 2.0, // Velocidad reducida para mejor visualización
+        damage: currentPlayer.knight.damage + upgrades.damage,
+        color: currentPlayer.knight.projectileColor,
         isEnemy: false,
         angle: angle
       });
+      console.log(`[SHOOT] Proyectil ${projId} creado en (${startX.toFixed(1)}, ${startY.toFixed(1)}) hacia ángulo ${(angle * 180 / Math.PI).toFixed(1)}° con daño ${currentPlayer.knight.damage + upgrades.damage}`);
     }
     
     setProjectiles(prev => [...prev, ...newProjectiles]);
-  }, [player, gameState, lastShot, upgrades, enemies, boss]);
-
-  const dropItem = useCallback((x: number, y: number, type: 'cosmos' | 'health' | 'magnet', value: number) => {
-    setDrops(prev => [...prev, {
-      id: nextOrbId.current++,
-      x, y, 
-      type,
-      value,
-      lifetime: type === 'health' ? 8 : type === 'magnet' ? 8 : 15 // Health y magnet duran 8s, cosmos 15s
-    }]);
-  }, []);
+  }, [gameState, lastShot, upgrades]);
 
   const gainCosmos = useCallback((amount: number) => {
     if (!player) return;
@@ -320,22 +473,16 @@ const SaintSeiyaGame: React.FC = () => {
     setPlayer(prev => {
       if (!prev) return prev;
       
-      // Sistema de combo
-      const comboMultiplier = 1 + (prev.combo * 0.1);
-      const finalAmount = Math.floor(amount * comboMultiplier);
-      
-      let newCosmos = prev.cosmos + finalAmount;
+      let newCosmos = prev.cosmos + amount;
       let newLevel = prev.level;
-      let newCombo = Math.min(prev.combo + 1, 10);
-      const newComboTimer = 3000; // 3 segundos para mantener combo
       
-      // Fórmula de cosmos requerido: 100 * (nivel^1.5)
-      let cosmosRequired = Math.floor(100 * Math.pow(newLevel, 1.5));
+      // Fórmula de cosmos requerido: comienza en 10, incrementa de 5 en 5
+      let cosmosRequired = 10 + ((newLevel - 1) * 5);
       
       while (newCosmos >= cosmosRequired) {
         newCosmos -= cosmosRequired;
         newLevel++;
-        cosmosRequired = Math.floor(100 * Math.pow(newLevel, 1.5));
+        cosmosRequired = 10 + ((newLevel - 1) * 5);
         
         const choices: Upgrade[] = [];
         while (choices.length < 3) {
@@ -349,9 +496,7 @@ const SaintSeiyaGame: React.FC = () => {
       return { 
         ...prev, 
         cosmos: newCosmos, 
-        level: newLevel, 
-        combo: newCombo, 
-        comboTimer: newComboTimer 
+        level: newLevel
       };
     });
   }, [player]);
@@ -422,21 +567,39 @@ const SaintSeiyaGame: React.FC = () => {
 
   useEffect(() => {
     if (!gameStarted || gameState !== 'playing' || boss) {
-      console.log('🔍 SPAWN SYSTEM DISABLED:', { gameStarted, gameState, hasBoss: !!boss });
       return;
     }
     
-    // Sistema progresivo con spawn interval reducido
-    // Oleada 1: 1.5s, reduce hasta 0.3s en oleadas altas
-    const baseInterval = 1500; // 1.5 segundos iniciales
-    const reduction = (waveNumber - 1) * 100; // Reducir 100ms por oleada
-    const spawnInterval = Math.max(300, baseInterval - reduction); // Mínimo 300ms
-    
-    console.log(`🎮 SPAWN SYSTEM ACTIVE: Intervalo ${spawnInterval}ms | Oleada ${waveNumber}`);
+    // Sistema progresivo con spawn interval balanceado estilo Vampire Survivors
+    const baseInterval = 2500; // 2.5 segundos base (más rápido)
+    const reduction = (waveNumber - 1) * 80; // Reducir 80ms por oleada
+    const spawnInterval = Math.max(1000, baseInterval - reduction); // Mínimo 1 segundo
     
     const interval = setInterval(() => {
       const currentPlayer = playerRef.current;
       if (!currentPlayer) return;
+      
+      // Límite de enemigos activos progresivo
+      const maxActiveEnemies = Math.min(8 + Math.floor(waveNumber * 1.5), 25); // Empezar con 8, máximo 25
+      
+      setEnemies(currentEnemies => {
+        if (currentEnemies.length >= maxActiveEnemies) {
+          return currentEnemies;
+        }
+        // Limpieza periódica: remover enemigos muy lejanos
+        const now = Date.now();
+        if (now - lastCleanupTime.current > 5000) { // Cada 5 segundos
+          lastCleanupTime.current = now;
+          const currentPlayer = playerRef.current;
+          if (currentPlayer) {
+            return currentEnemies.filter(e => {
+              const dist = Math.hypot(currentPlayer.x - e.x, currentPlayer.y - e.y);
+              return dist <= 1200; // Mantener solo enemigos dentro de 1200px
+            });
+          }
+        }
+        return currentEnemies;
+      });
       
       // Sistema de oleadas progresivo con más enemigos
       let availableTypes: Array<'normal' | 'fast' | 'tank'> = ['normal'];
@@ -463,9 +626,6 @@ const SaintSeiyaGame: React.FC = () => {
       x = Math.max(50, Math.min(MAP_WIDTH - 50, x));
       y = Math.max(50, Math.min(MAP_HEIGHT - 50, y));
       
-      const distanceFromPlayer = Math.hypot(x - currentPlayer.x, y - currentPlayer.y);
-      console.log(`🎯 CREATING WARNING at (${Math.floor(x)}, ${Math.floor(y)}) type: ${type} | Distance from player: ${Math.floor(distanceFromPlayer)}`);
-      
       // Crear advertencia de spawn (0.8 segundos)
       const warning: SpawnWarning = {
         id: nextWarningId.current++,
@@ -476,20 +636,16 @@ const SaintSeiyaGame: React.FC = () => {
       };
       
       setSpawnWarnings(prev => {
-        // Límite dinámico basado en oleada
-        // Oleada 1: 3-5 enemigos, Oleada 2: 5-8, Oleada 3+: 8-15+
-        const maxWarnings = Math.min(3 + (waveNumber * 3), 50);
+        // Límite muy conservador para evitar lag
+        const maxWarnings = Math.min(2 + Math.floor(waveNumber / 2), 10);
         if (prev.length >= maxWarnings) {
-          console.log(`⏸️ Too many warnings: ${prev.length}`);
           return prev;
         }
-        console.log(`✨ Warning added! Total warnings: ${prev.length + 1}`);
         return [...prev, warning];
       });
     }, spawnInterval);
     
     return () => {
-      console.log('🛑 CLEARING SPAWN INTERVAL');
       clearInterval(interval);
     };
   }, [gameStarted, gameState, waveNumber, boss]);
@@ -501,7 +657,13 @@ const SaintSeiyaGame: React.FC = () => {
     let lastTime = performance.now();
     
     const gameLoop = (currentTime: number) => {
-      if (!player) return;
+      const currentPlayer = playerRef.current;
+      if (!currentPlayer) return;
+      
+      // Capturar estados actuales al inicio del frame
+      const currentProjectiles = projectilesRef.current;
+      const currentEnemies = enemiesRef.current;
+      const currentBoss = bossRef.current;
       
       // Calcular deltaTime en segundos
       const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Limitar a 100ms máximo
@@ -510,37 +672,17 @@ const SaintSeiyaGame: React.FC = () => {
       // Actualizar timer del stage
       const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
       setStageTime(currentStageTime);
+      stageTimeRef.current = currentStageTime;
       
-      // Verificar si debe aparecer el jefe (cada 5 oleadas completadas, no por tiempo)
-      // Boss aparece al completar las oleadas 5, 10, 15, etc.
-      if (waveNumber > 0 && waveNumber % 5 === 0 && waveKills === 0 && !boss) {
-        console.log(`👑 Boss spawn! Completada oleada ${waveNumber}`);
+      // Verificar si debe aparecer el jefe al minuto 2 (120 segundos)
+      if (currentStageTime >= 120 && !bossRef.current) {
         spawnBoss();
       }
       
       // Velocidad base en píxeles por segundo (reducida para mejor control)
       const baseSpeed = 180; // Velocidad base más balanceada
-      const speedMultiplier = player.knight.speed + upgrades.speed * 0.5;
+      const speedMultiplier = currentPlayer.knight.speed + upgrades.speed * 0.5;
       const pixelsPerSecond = baseSpeed * speedMultiplier;
-      
-      // Actualizar combo timer y magnet duration
-      setPlayer(p => {
-        if (!p) return p;
-        const newComboTimer = Math.max(0, p.comboTimer - deltaTime * 1000);
-        const newCombo = newComboTimer <= 0 ? 0 : p.combo;
-        
-        // Actualizar magnet duration
-        const newMagnetDuration = Math.max(0, p.magnetDuration - deltaTime);
-        const newMagnetActive = newMagnetDuration > 0;
-        
-        return { 
-          ...p, 
-          comboTimer: newComboTimer, 
-          combo: newCombo,
-          magnetDuration: newMagnetDuration,
-          magnetActive: newMagnetActive
-        };
-      });
       
       // Leer input y construir vector de dirección
       let dx = 0, dy = 0;
@@ -556,10 +698,10 @@ const SaintSeiyaGame: React.FC = () => {
         const normalizedDy = (dy / magnitude) * pixelsPerSecond * deltaTime;
         
         // Calcular nueva posición con límites
-        const newX = Math.max(20, Math.min(MAP_WIDTH - 20, player.x + normalizedDx));
-        const newY = Math.max(20, Math.min(MAP_HEIGHT - 20, player.y + normalizedDy));
+        const newX = Math.max(20, Math.min(MAP_WIDTH - 20, currentPlayer.x + normalizedDx));
+        const newY = Math.max(20, Math.min(MAP_HEIGHT - 20, currentPlayer.y + normalizedDy));
         
-        // Actualizar posición del jugador y cámara juntos
+        // Actualizar posición del jugador
         setPlayer(prev => {
           if (!prev) return prev;
           return {
@@ -568,15 +710,85 @@ const SaintSeiyaGame: React.FC = () => {
             y: newY
           };
         });
+        
+        // Actualizar cámara para seguir al jugador suavemente
+        const newCamX = Math.max(0, Math.min(MAP_WIDTH - WIDTH, newX - WIDTH / 2));
+        const newCamY = Math.max(0, Math.min(MAP_HEIGHT - HEIGHT, newY - HEIGHT / 2));
+        setCamera({ x: newCamX, y: newCamY });
       }
       
-      // Actualizar cámara para seguir al jugador suavemente
-      setCamera({
-        x: Math.max(0, Math.min(MAP_WIDTH - WIDTH, player.x - WIDTH / 2)),
-        y: Math.max(0, Math.min(MAP_HEIGHT - HEIGHT, player.y - HEIGHT / 2))
-      });
+      // ===== SISTEMA DE DISPARO AUTOMÁTICO (INLINE) =====
+      const nowShoot = Date.now();
+      const fireRate = currentPlayer.knight.fireRate - upgrades.fireRate * 50;
+      const cooldownTime = Math.max(200, fireRate);
       
-      shoot();
+      let projectilesToAdd: Projectile[] = [];
+      
+      if (nowShoot - lastShot >= cooldownTime) {
+        // Cooldown pasado, intentar disparar
+        const attackRange = 450;
+        
+        // Encontrar el enemigo más cercano
+        const nearestEnemy = CombatSystem.findNearestEnemy(
+          { x: currentPlayer.x, y: currentPlayer.y },
+          currentEnemies,
+          attackRange
+        );
+        
+        // Determinar el objetivo
+        let target: { x: number; y: number; id: number } | null = nearestEnemy;
+        
+        // Priorizar boss si está en rango
+        if (currentBoss) {
+          const bossDist = CombatSystem.calculateDistance(
+            { x: currentPlayer.x, y: currentPlayer.y },
+            { x: currentBoss.x, y: currentBoss.y }
+          );
+          
+          if (bossDist <= attackRange) {
+            target = currentBoss;
+          }
+        }
+        
+        // Si hay objetivo, disparar
+        if (target) {
+          setLastShot(nowShoot);
+          
+          // Crear efecto visual de ataque
+          CombatSystem.createAttackEffect({ x: currentPlayer.x, y: currentPlayer.y }, target);
+          
+          // Activar animación de ataque
+          setIsAttacking(true);
+          setTimeout(() => setIsAttacking(false), 200);
+          
+          const shots = 1 + upgrades.multiShot;
+          
+          // Calcular ángulo base hacia el objetivo
+          const baseAngle = Math.atan2(target.y - currentPlayer.y, target.x - currentPlayer.x);
+          
+          for (let i = 0; i < shots; i++) {
+            const angle = shots === 1 ? baseAngle : baseAngle + (i - (shots - 1) / 2) * 0.2;
+            const offsetDistance = 25;
+            const startX = currentPlayer.x + Math.cos(angle) * offsetDistance;
+            const startY = currentPlayer.y + Math.sin(angle) * offsetDistance;
+            
+            const projId = nextProjectileId.current++;
+            projectilesToAdd.push({
+              id: projId,
+              x: startX,
+              y: startY,
+              dx: Math.cos(angle) * 2.0,
+              dy: Math.sin(angle) * 2.0,
+              damage: currentPlayer.knight.damage + upgrades.damage,
+              color: currentPlayer.knight.projectileColor,
+              isEnemy: false,
+              angle: angle
+            });
+            console.log(`[SHOOT] Proyectil ${projId} creado hacia (${target.x.toFixed(1)}, ${target.y.toFixed(1)}) - Daño: ${currentPlayer.knight.damage + upgrades.damage}`);
+          }
+        }
+      }
+      // ===== FIN SISTEMA DE DISPARO =====
       
       // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
       const now = Date.now();
@@ -591,28 +803,41 @@ const SaintSeiyaGame: React.FC = () => {
             // Crear el enemigo con estadísticas balanceadas y escalado por oleada
             let health: number, maxHealth: number, speed: number, cosmosValue: number;
             
-            // Multiplicadores de oleada
-            const hpMultiplier = 1 + (waveNumber - 1) * 0.20; // +20% HP por oleada
+            // Escalado progresivo de dificultad optimizado para Vampire Survivors
+            // Oleada 1: Enemigos débiles (mueren de 1 golpe con daño 18)
+            // Oleada 5+: Enemigos más resistentes
+            const baseHpMultiplier = 1 + (waveNumber - 1) * 0.12; // +12% HP por oleada
             const speedMultiplier = 1 + (waveNumber - 1) * 0.05; // +5% velocidad por oleada
             
             switch (warning.type) {
               case 'tank':
-                health = Math.floor((40 + (waveNumber * 5)) * hpMultiplier);
+                // Oleada 1: ~30 HP (2 golpes con daño 18)
+                health = Math.floor((30 + (waveNumber * 5)) * baseHpMultiplier);
                 maxHealth = health;
-                speed = 0.4 * speedMultiplier; // Lento pero escala
+                speed = 0.45 * speedMultiplier; // Lento pero escala
                 cosmosValue = 5 + Math.floor(Math.random() * 4); // 5-8 cosmos
                 break;
               case 'fast':
-                health = Math.floor((15 + (waveNumber * 2)) * hpMultiplier);
+                // Oleada 1: ~10 HP (1 golpe con daño 18)
+                health = Math.floor((10 + (waveNumber * 2)) * baseHpMultiplier);
                 maxHealth = health;
-                speed = 1.5 * speedMultiplier; // Muy rápido (incrementado de 1.2)
+                speed = 1.6 * speedMultiplier; // Muy rápido
                 cosmosValue = 3 + Math.floor(Math.random() * 3); // 3-5 cosmos
                 break;
               default: // 'normal'
-                health = Math.floor((25 + (waveNumber * 3)) * hpMultiplier);
+                // Oleada 1: ~15 HP (1 golpe con daño 18)
+                health = Math.floor((15 + (waveNumber * 3)) * baseHpMultiplier);
                 maxHealth = health;
-                speed = 0.8 * speedMultiplier; // Velocidad media (incrementado de 0.7)
+                speed = 0.85 * speedMultiplier; // Velocidad media
                 cosmosValue = 2 + Math.floor(Math.random() * 3); // 2-4 cosmos
+            }
+            
+            // Obtener sprite del pool (reutilizar sprites precargados)
+            let sprite: AnimatedSprite | undefined;
+            if (enemySpritePool.current.length > 0) {
+              // Usar el siguiente sprite del pool de forma circular
+              sprite = enemySpritePool.current[nextSpriteIndex.current % enemySpritePool.current.length];
+              nextSpriteIndex.current++;
             }
             
             const enemy: Enemy = {
@@ -624,10 +849,10 @@ const SaintSeiyaGame: React.FC = () => {
               speed,
               type: warning.type,
               angle: 0,
-              cosmosValue
+              cosmosValue,
+              sprite
             };
             
-            console.log(`🐛 SPAWNING ENEMY at (${Math.floor(enemy.x)}, ${Math.floor(enemy.y)}) type: ${enemy.type} | HP: ${enemy.health} | Speed: ${enemy.speed.toFixed(2)} | Cosmos: ${enemy.cosmosValue}`);
             setEnemies(e => [...e, enemy]);
             spawned++;
           } else {
@@ -635,62 +860,249 @@ const SaintSeiyaGame: React.FC = () => {
           }
         });
         
-        if (spawned > 0) {
-          console.log(`✅ Spawned ${spawned} enemigo(s) | Warnings remaining: ${remaining.length}`);
-        }
-        
         return remaining;
       });
       
-      setProjectiles(prev => prev
-        .map(p => ({ ...p, x: p.x + p.dx, y: p.y + p.dy }))
-        .filter(p => p.x >= -50 && p.x <= MAP_WIDTH + 50 && p.y >= -50 && p.y <= MAP_HEIGHT + 50)
-      );
+      // ===== NUEVO SISTEMA INTEGRADO: MOVIMIENTO + COLISIONES =====
       
-      // Actualizar enemigos para que persigan al jugador
-      setEnemies(prev => {
-        if (prev.length > 0 && Math.random() < 0.01) { // Log ocasional
-          console.log(`👹 Enemies active: ${prev.length}`);
+      // Combinar proyectiles existentes con los nuevos del disparo
+      const allProjectiles = [...currentProjectiles, ...projectilesToAdd];
+      console.log(`[FRAME] Total proyectiles a procesar: ${allProjectiles.length} (${currentProjectiles.length} existentes + ${projectilesToAdd.length} nuevos)`);
+      
+      // PASO 1: Mover proyectiles
+      const movedProjectiles: Projectile[] = [];
+      const cameraMargin = 200;
+      
+      for (const p of allProjectiles) {
+        const newX = p.x + p.dx * 2.5;
+        const newY = p.y + p.dy * 2.5;
+        
+        // Verificar si está en rango de la cámara
+        const inCameraRange = 
+          newX >= camera.x - cameraMargin && 
+          newX <= camera.x + WIDTH + cameraMargin &&
+          newY >= camera.y - cameraMargin && 
+          newY <= camera.y + HEIGHT + cameraMargin;
+        
+        if (inCameraRange) {
+          movedProjectiles.push({ ...p, x: newX, y: newY });
+        }
+      }
+      
+      console.log(`[MOVED] Proyectiles movidos y en cámara: ${movedProjectiles.length}`);
+      
+      // PASO 2: Mover enemigos y verificar colisión con jugador
+      const movedEnemies: Enemy[] = [];
+      let playerDamaged = false;
+      let screenShakeNeeded = false;
+      
+      for (const enemy of currentEnemies) {
+        // Actualizar sprite
+        if (enemy.sprite) {
+          enemy.sprite.update(deltaTime);
         }
         
-        return prev.map(enemy => {
-          const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-          
-          // Velocidad base multiplicada por deltaTime para movimiento suave
-          // enemy.speed es un multiplicador (0.3 a 0.8)
-          const baseEnemySpeed = 120; // píxeles por segundo
-          const actualSpeed = baseEnemySpeed * enemy.speed * deltaTime;
-          
-          return {
-            ...enemy,
-            x: enemy.x + Math.cos(angle) * actualSpeed,
-            y: enemy.y + Math.sin(angle) * actualSpeed,
-            angle
-          };
+        // Verificar colisión con jugador (contacto físico)
+        if (Math.hypot(currentPlayer.x - enemy.x, currentPlayer.y - enemy.y) < 30) {
+          if (!playerDamaged) {
+            playerDamaged = true;
+            screenShakeNeeded = true;
+          }
+          continue; // Eliminar enemigo que tocó al jugador
+        }
+        
+        // Mover enemigo hacia el jugador
+        const angle = Math.atan2(currentPlayer.y - enemy.y, currentPlayer.x - enemy.x);
+        const baseEnemySpeed = 120;
+        const actualSpeed = baseEnemySpeed * enemy.speed * deltaTime;
+        
+        const newX = enemy.x + Math.cos(angle) * actualSpeed;
+        const newY = enemy.y + Math.sin(angle) * actualSpeed;
+        
+        // Flip sprite según dirección
+        if (enemy.sprite) {
+          enemy.sprite.flipX = angle > Math.PI / 2 || angle < -Math.PI / 2;
+        }
+        
+        movedEnemies.push({
+          ...enemy,
+          x: newX,
+          y: newY,
+          angle: angle
         });
+      }
+      
+      // Aplicar daño del jugador si fue golpeado
+      if (playerDamaged) {
+        setPlayer(p => {
+          if (!p) return p;
+          const newHealth = p.health - 5;
+          if (newHealth <= 0) setGameState('gameover');
+          return { ...p, health: Math.max(0, newHealth) };
+        });
+        if (screenShakeNeeded) {
+          setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
+          setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
+        }
+      }
+      
+      // PASO 3: Procesar colisiones de proyectiles
+      const projectilesToKeep: Projectile[] = [];
+      const enemiesToKeep: Enemy[] = [];
+      const newDrops: Drop[] = [];
+      let addScore = 0;
+      let addKills = 0;
+      
+      const enemiesAlive = new Set(movedEnemies.map(e => e.id));
+      
+      console.log(`[COLLISION] Proyectiles: ${movedProjectiles.length}, Enemigos: ${movedEnemies.length}`);
+      
+      for (const proj of movedProjectiles) {
+        let projectileHit = false;
+        
+        if (proj.isEnemy) {
+          // Proyectil enemigo vs jugador
+          const distToPlayer = Math.hypot(currentPlayer.x - proj.x, currentPlayer.y - proj.y);
+          if (distToPlayer < 25) {
+            projectileHit = true;
+            setPlayer(p => {
+              if (!p) return p;
+              const newHealth = p.health - 10;
+              if (newHealth <= 0) setGameState('gameover');
+              return { ...p, health: Math.max(0, newHealth) };
+            });
+            setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
+            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
+          }
+        } else {
+          // Proyectil del jugador vs enemigos
+          for (const enemy of movedEnemies) {
+            if (!enemiesAlive.has(enemy.id)) continue;
+            
+            const dist = Math.hypot(enemy.x - proj.x, enemy.y - proj.y);
+            if (dist < 30) {
+              projectileHit = true;
+              enemy.health -= proj.damage;
+              
+              console.log(`[HIT] Proyectil ${proj.id} → Enemigo ${enemy.id} | HP: ${enemy.health + proj.damage} → ${enemy.health}`);
+              
+              if (enemy.health <= 0) {
+                console.log(`[KILL] Enemigo ${enemy.id} eliminado`);
+                enemiesAlive.delete(enemy.id);
+                
+                const rand = Math.random();
+                newDrops.push({
+                  id: nextOrbId.current++,
+                  x: enemy.x,
+                  y: enemy.y,
+                  type: rand < 0.08 ? 'health' : 'cosmos',
+                  value: rand < 0.08 ? 20 : enemy.cosmosValue,
+                  lifetime: rand < 0.08 ? 8 : 15
+                });
+                
+                addScore += 100;
+                addKills += 1;
+              }
+              break;
+            }
+          }
+          
+          // Proyectil del jugador vs boss
+          if (!projectileHit && currentBoss) {
+            const distBoss = Math.hypot(currentBoss.x - proj.x, currentBoss.y - proj.y);
+            if (distBoss < 50) {
+              projectileHit = true;
+              setBoss(b => {
+                if (!b) return b;
+                const newHealth = b.health - proj.damage;
+                console.log(`[BOSS HIT] HP: ${b.health} → ${newHealth}`);
+                
+                if (newHealth <= 0) {
+                  console.log(`[BOSS DEFEATED]`);
+                  newDrops.push({
+                    id: nextOrbId.current++,
+                    x: b.x, y: b.y,
+                    type: 'cosmos',
+                    value: 40 + Math.floor(Math.random() * 11),
+                    lifetime: 15
+                  });
+                  addScore += 1000;
+                  setCurrentHouse(h => h + 1);
+                  setWaveNumber(1);
+                  setWaveKills(0);
+                  setGameState('houseclear');
+                  setTimeout(() => {
+                    if (currentHouse + 1 < GOLD_SAINTS.length) {
+                      spawnBoss();
+                    }
+                  }, 3000);
+                  return null;
+                }
+                return { ...b, health: newHealth };
+              });
+            }
+          }
+        }
+        
+        if (!projectileHit) {
+          projectilesToKeep.push(proj);
+        }
+      }
+      
+      // Filtrar enemigos vivos
+      for (const enemy of movedEnemies) {
+        if (enemiesAlive.has(enemy.id)) {
+          enemiesToKeep.push(enemy);
+        }
+      }
+      
+      console.log(`[RESULT] Proyectiles finales: ${projectilesToKeep.length}, Enemigos: ${enemiesToKeep.length}, Kills: ${addKills}`);
+      
+      // Actualizar estados AL FINAL DEL FRAME
+      setProjectiles(projectilesToKeep);
+      projectilesRef.current = projectilesToKeep;
+      setEnemies(enemiesToKeep);
+      enemiesRef.current = enemiesToKeep;
+      
+      if (newDrops.length > 0) {
+        setDrops(prev => {
+          const combined = [...prev, ...newDrops];
+          return combined.length > 30 ? combined.slice(-30) : combined;
+        });
+      }
+      
+      if (addScore > 0) setScore(s => s + addScore);
+      if (addKills > 0) {
+        setWaveKills(k => {
+          const newKills = k + addKills;
+          if (newKills >= 25) {
+            setWaveNumber(w => w + 1);
+            return 0;
+          }
+          return newKills;
+        });
+      }
+      
+      // Actualizar drops: simplemente actualizar lifetime
+      setDrops(prev => {
+        const updatedDrops = prev
+          .map(drop => {
+            const newLifetime = drop.lifetime - deltaTime;
+            if (newLifetime <= 0) return null;
+            return { ...drop, lifetime: newLifetime };
+          })
+          .filter(drop => drop !== null) as Drop[];
+        
+        const maxDrops = 20;
+        if (updatedDrops.length > maxDrops) {
+          return updatedDrops.sort((a, b) => b.lifetime - a.lifetime).slice(0, maxDrops);
+        }
+        return updatedDrops;
       });
       
-      // Actualizar drops y atraerlos si hay magnet activo o están cerca
-      setDrops(prev => prev.map(drop => {
-        // Radio de atracción
-        const attractRadius = player.magnetActive ? 400 : 100; // Magnet atrae desde 400px, normal 100px
-        const dist = Math.hypot(player.x - drop.x, player.y - drop.y);
-        
-        if (dist < attractRadius) {
-          const angle = Math.atan2(player.y - drop.y, player.x - drop.x);
-          const attractSpeed = player.magnetActive ? 6 : 3; // Magnet más rápido
-          return {
-            ...drop,
-            x: drop.x + Math.cos(angle) * attractSpeed,
-            y: drop.y + Math.sin(angle) * attractSpeed
-          };
-        }
-        return drop;
-      }));
-      
-      // Recolectar drops
+      // Recolectar drops - radio más grande para compensar falta de atracción
       setDrops(prev => prev.filter(drop => {
-        if (Math.hypot(player.x - drop.x, player.y - drop.y) < 20) {
+        if (Math.hypot(currentPlayer.x - drop.x, currentPlayer.y - drop.y) < 40) {
           // Procesar el drop según tipo
           if (drop.type === 'cosmos') {
             gainCosmos(drop.value);
@@ -701,146 +1113,68 @@ const SaintSeiyaGame: React.FC = () => {
               const newHealth = Math.min(p.maxHealth, p.health + drop.value);
               return { ...p, health: newHealth };
             });
-          } else if (drop.type === 'magnet') {
-            // Activar efecto magnet
-            setPlayer(p => {
-              if (!p) return p;
-              return { ...p, magnetActive: true, magnetDuration: 5 }; // 5 segundos
-            });
           }
           return false; // Remover el drop
         }
         return true;
       }));
       
-      setProjectiles(prev => {
-        const remaining: Projectile[] = [];
-        
-        prev.forEach(proj => {
-          if (proj.isEnemy) {
-            if (Math.hypot(player.x - proj.x, player.y - proj.y) < 25) {
-              setPlayer(p => {
-                if (!p) return p;
-                const newHealth = p.health - 10;
-                if (newHealth <= 0) setGameState('gameover');
-                // Screen shake al recibir daño
-                setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
-                setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
-                return { ...p, health: Math.max(0, newHealth) };
-              });
-            } else {
-              remaining.push(proj);
-            }
-          } else {
-            let hit = false;
-            
-            if (boss) {
-              if (Math.hypot(boss.x - proj.x, boss.y - proj.y) < 40) {
-                setBoss(b => {
-                  if (!b) return b;
-                  const newHealth = b.health - proj.damage;
-                  if (newHealth <= 0) {
-                    // Boss eliminado - dropear mucho cosmos
-                    dropItem(b.x, b.y, 'cosmos', 40 + Math.floor(Math.random() * 11)); // 40-50 cosmos
-                    setScore(s => s + 1000);
-                    setCurrentHouse(h => h + 1);
-                    setWaveNumber(1); // Reiniciar oleadas para la siguiente casa
-                    setWaveKills(0);
-                    setGameState('houseclear');
-                    setTimeout(() => {
-                      if (currentHouse + 1 < GOLD_SAINTS.length) {
-                        spawnBoss();
-                      }
-                    }, 3000);
-                    return null;
-                  }
-                  return { ...b, health: newHealth };
-                });
-                hit = true;
-              }
-            }
-            
-            setEnemies(prevEnemies => {
-              return prevEnemies.filter(enemy => {
-                if (Math.hypot(enemy.x - proj.x, enemy.y - proj.y) < 20) {
-                  const newHealth = enemy.health - proj.damage;
-                  if (newHealth <= 0) {
-                    // Enemigo eliminado - dropear items
-                    
-                    // Siempre dropear cosmos
-                    dropItem(enemy.x, enemy.y, 'cosmos', enemy.cosmosValue);
-                    
-                    // 8% de probabilidad de health orb
-                    if (Math.random() < 0.08) {
-                      dropItem(enemy.x + (Math.random() - 0.5) * 20, enemy.y + (Math.random() - 0.5) * 20, 'health', 20);
-                    }
-                    
-                    // 3% de probabilidad de magnet orb
-                    if (Math.random() < 0.03) {
-                      dropItem(enemy.x + (Math.random() - 0.5) * 20, enemy.y + (Math.random() - 0.5) * 20, 'magnet', 1);
-                    }
-                    
-                    setScore(s => s + 100);
-                    setWaveKills(k => {
-                      const newKills = k + 1;
-                      // Aumentar oleada cada 25 enemigos eliminados (no 20)
-                      if (newKills >= 25) {
-                        setWaveNumber(w => w + 1);
-                        console.log(`🌊 Nueva oleada: ${waveNumber + 1}`);
-                        return 0; // Reiniciar contador para la nueva oleada
-                      }
-                      return newKills;
-                    });
-                    hit = true;
-                    return false;
-                  }
-                  return true;
-                }
-                return true;
-              }).map(enemy => {
-                if (Math.hypot(enemy.x - proj.x, enemy.y - proj.y) < 20) {
-                  hit = true;
-                  return { ...enemy, health: enemy.health - proj.damage };
-                }
-                return enemy;
-              });
-            });
-            
-            if (!hit) {
-              remaining.push(proj);
-            }
-          }
-        });
-        
-        return remaining;
-      });
-      
-      setEnemies(prev => prev.filter(enemy => {
-        if (Math.hypot(player.x - enemy.x, player.y - enemy.y) < 25) {
-          setPlayer(p => {
-            if (!p) return p;
-            const newHealth = p.health - 5;
-            if (newHealth <= 0) setGameState('gameover');
-            // Screen shake al recibir daño
-            setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
-            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
-            return { ...p, health: Math.max(0, newHealth) };
-          });
-          return false;
-        }
-        return true;
-      }));
-      
-      if (boss) {
+      // Actualizar lógica del boss
+      if (currentBoss) {
         const now = Date.now();
-        if (now - boss.lastAttack > 2000) {
+        
+        // Super ataque cada 10 segundos (10000ms)
+        if (now - currentBoss.lastSuperAttack > 10000) {
           setBoss(b => {
             if (!b) return b;
             
+            // Calcular dirección hacia el jugador
+            const angle = Math.atan2(currentPlayer.y - b.y, currentPlayer.x - b.x);
+            
+            // Crear advertencia de área de ataque
+            // El ataque será un rectángulo largo (200x400) en la dirección del jugador
+            const warningWidth = 200;
+            const warningHeight = 400;
+            
+            // Calcular posición del centro del área de ataque (frente al boss)
+            const attackDistance = warningHeight / 2 + 60; // Distancia desde el boss al centro del ataque
+            const attackX = b.x + Math.cos(angle) * attackDistance;
+            const attackY = b.y + Math.sin(angle) * attackDistance;
+            
+            const warning: BossSuperAttackWarning = {
+              id: nextSuperAttackId.current++,
+              x: attackX,
+              y: attackY,
+              width: warningWidth,
+              height: warningHeight,
+              angle: angle,
+              createdAt: now,
+              warningDuration: 1500, // 1.5 segundos de advertencia
+              executionTime: now + 1500
+            };
+            
+            setBossSuperAttackWarnings(prev => [...prev, warning]);
+            
+            return { ...b, lastSuperAttack: now };
+          });
+        }
+        
+        // Ataque regular cada 2 segundos
+        if (now - currentBoss.lastAttack > 2000) {
+          setBoss(b => {
+            if (!b) return b;
+            
+            // Activar animación de ataque
+            if (b.sprite) {
+              b.sprite.setAnimation('attack');
+            }
+            
             const pattern = Math.floor(Math.random() * 3);
             const newProjectiles: Projectile[] = [];
+            const newEffects: BossAttackEffect[] = [];
             
             if (pattern === 0) {
+              // Patrón circular: 8 bolas de poder en todas direcciones
               for (let i = 0; i < 8; i++) {
                 const angle = (i / 8) * Math.PI * 2;
                 newProjectiles.push({
@@ -851,12 +1185,25 @@ const SaintSeiyaGame: React.FC = () => {
                   dy: Math.sin(angle) * 3,
                   damage: 15,
                   color: b.gold.color,
-                  pierce: 0,
                   isEnemy: true,
                   angle: angle
                 });
+                
+                // Crear efecto visual para cada dirección
+                newEffects.push({
+                  id: nextBossEffectId.current++,
+                  x: b.x,
+                  y: b.y,
+                  targetX: b.x + Math.cos(angle) * 150,
+                  targetY: b.y + Math.sin(angle) * 150,
+                  createdAt: Date.now(),
+                  duration: 600,
+                  angle: angle,
+                  scale: 1
+                });
               }
             } else if (pattern === 1) {
+              // Patrón direccional: 5 bolas hacia el jugador
               const angle = Math.atan2(player.y - b.y, player.x - b.x);
               for (let i = -2; i <= 2; i++) {
                 newProjectiles.push({
@@ -867,12 +1214,25 @@ const SaintSeiyaGame: React.FC = () => {
                   dy: Math.sin(angle + i * 0.2) * 4,
                   damage: 20,
                   color: b.gold.color,
-                  pierce: 0,
                   isEnemy: true,
                   angle: angle + i * 0.2
                 });
+                
+                // Crear efecto visual para cada proyectil
+                newEffects.push({
+                  id: nextBossEffectId.current++,
+                  x: b.x,
+                  y: b.y,
+                  targetX: player.x + Math.cos(angle + i * 0.2) * 100,
+                  targetY: player.y + Math.sin(angle + i * 0.2) * 100,
+                  createdAt: Date.now() + i * 50, // Delay escalonado
+                  duration: 700,
+                  angle: angle + i * 0.2,
+                  scale: 1.2
+                });
               }
             } else {
+              // Patrón espiral: 12 bolas rotando
               for (let i = 0; i < 12; i++) {
                 const angle = (i / 12) * Math.PI * 2 + now / 1000;
                 newProjectiles.push({
@@ -883,18 +1243,129 @@ const SaintSeiyaGame: React.FC = () => {
                   dy: Math.sin(angle) * 2,
                   damage: 10,
                   color: b.gold.color,
-                  pierce: 0,
                   isEnemy: true,
                   angle: angle
+                });
+                
+                // Crear efecto visual para espiral
+                newEffects.push({
+                  id: nextBossEffectId.current++,
+                  x: b.x,
+                  y: b.y,
+                  targetX: b.x + Math.cos(angle) * 120,
+                  targetY: b.y + Math.sin(angle) * 120,
+                  createdAt: Date.now() + i * 30, // Delay para efecto espiral
+                  duration: 800,
+                  angle: angle,
+                  scale: 0.8
                 });
               }
             }
             
             setProjectiles(prev => [...prev, ...newProjectiles]);
-            return { ...b, lastAttack: now };
+            setBossAttackEffects(prev => [...prev, ...newEffects]);
+            
+            // Marcar como atacando y volver a idle después
+            const updatedBoss = { ...b, lastAttack: now, isAttacking: true };
+            setTimeout(() => {
+              setBoss(current => {
+                if (!current) return current;
+                if (current.sprite) {
+                  current.sprite.setAnimation('idle');
+                }
+                return { ...current, isAttacking: false };
+              });
+            }, 300);
+            
+            return updatedBoss;
           });
         }
+        
+        // Actualizar sprite del boss
+        if (currentBoss.sprite) {
+          currentBoss.sprite.update(deltaTime);
+        }
       }
+      
+      // Actualizar efectos de ataque del boss (limpiar los expirados más agresivamente)
+      setBossAttackEffects(prev => {
+        const now = Date.now();
+        const filtered = prev.filter(effect => now - effect.createdAt < effect.duration);
+        // Límite más agresivo: solo 15 efectos
+        if (filtered.length > 15) {
+          return filtered.slice(-15);
+        }
+        return filtered;
+      });
+      
+      // Procesar advertencias de super ataque y ejecutarlos cuando sea tiempo
+      setBossSuperAttackWarnings(prev => {
+        const now = Date.now();
+        const remaining: BossSuperAttackWarning[] = [];
+        
+        prev.forEach(warning => {
+          if (now >= warning.executionTime) {
+            // Crear el super ataque activo
+            const superAttack: BossSuperAttack = {
+              id: warning.id,
+              x: warning.x,
+              y: warning.y,
+              width: warning.width,
+              height: warning.height,
+              angle: warning.angle,
+              damage: 30, // Daño del super ataque
+              createdAt: now,
+              duration: 500 // Duración del ataque visible (0.5s)
+            };
+            
+            setBossSuperAttacks(attacks => [...attacks, superAttack]);
+            
+            // Screen shake al ejecutar super ataque
+            setScreenShake({ x: (Math.random() - 0.5) * 15, y: (Math.random() - 0.5) * 15 });
+            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 200);
+          } else {
+            remaining.push(warning);
+          }
+        });
+        
+        return remaining;
+      });
+      
+      // Actualizar super ataques activos y verificar colisión con jugador
+      setBossSuperAttacks(prev => {
+        const now = Date.now();
+        return prev.filter(attack => {
+          const age = now - attack.createdAt;
+          
+          // Verificar si el jugador está dentro del área de ataque
+          if (age < attack.duration) {
+            // Calcular si el jugador colisiona con el rectángulo rotado
+            const dx = player.x - attack.x;
+            const dy = player.y - attack.y;
+            
+            // Rotar el punto del jugador al sistema de coordenadas del ataque
+            const cos = Math.cos(-attack.angle);
+            const sin = Math.sin(-attack.angle);
+            const localX = dx * cos - dy * sin;
+            const localY = dx * sin + dy * cos;
+            
+            // Verificar si está dentro del rectángulo
+            if (Math.abs(localX) < attack.width / 2 && Math.abs(localY) < attack.height / 2) {
+              // Aplicar daño al jugador
+              setPlayer(p => {
+                if (!p) return p;
+                const newHealth = p.health - attack.damage;
+                if (newHealth <= 0) setGameState('gameover');
+                return { ...p, health: Math.max(0, newHealth) };
+              });
+              
+              return false; // Eliminar el ataque después de golpear
+            }
+          }
+          
+          return age < attack.duration;
+        });
+      });
       
       // Continuar el loop
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -908,10 +1379,10 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, gameState, keysPressed, shoot, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropItem, gainCosmos, waveNumber]);
+  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropItem, gainCosmos, waveNumber]);
 
   useEffect(() => {
-    if (!canvasRef.current || !player) return;
+    if (!canvasRef.current || !player || !gameStarted) return;
     
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -925,7 +1396,7 @@ const SaintSeiyaGame: React.FC = () => {
       const deltaTime = (now - lastFrameTime.current) / 1000;
       lastFrameTime.current = now;
       
-      // Actualizar animación del sprite
+      // Actualizar sprite del jugador cada frame (no throttled)
       if (playerSprite) {
         playerSprite.update(deltaTime);
         
@@ -986,81 +1457,42 @@ const SaintSeiyaGame: React.FC = () => {
         // Actualizar efectos de ataque
         CombatSystem.updateAttackEffects();
         
-        // Dibujar spawn warnings (advertencias de spawn)
+        // Dibujar spawn warnings (advertencias de spawn) - OPTIMIZADO
         const currentTime = Date.now();
-        spawnWarnings.forEach(warning => {
-          const timeLeft = warning.spawnTime - currentTime;
-          const progress = 1 - (timeLeft / warning.warningDuration);
-          
-          // Círculo pulsante que crece
-          const pulseSize = 15 + Math.sin(currentTime / 100) * 5;
-          const alpha = 0.3 + Math.sin(currentTime / 150) * 0.2;
-          
-          // Color según tipo de enemigo
-          let warningColor = '#FF0000';
-          if (warning.type === 'fast') warningColor = '#FF00FF';
-          if (warning.type === 'tank') warningColor = '#888888';
-          
-          // Círculo exterior pulsante
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = warningColor;
-          ctx.beginPath();
-          ctx.arc(warning.x, warning.y, pulseSize * (1 + progress * 0.5), 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Círculo interior más sólido
-          ctx.globalAlpha = 0.6;
-          ctx.fillStyle = warningColor;
-          ctx.beginPath();
-          ctx.arc(warning.x, warning.y, 8, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Anillo de advertencia
-          ctx.globalAlpha = 0.8;
-          ctx.strokeStyle = warningColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          const ringRadius = Math.max(5, 20 - progress * 5);
-          ctx.arc(warning.x, warning.y, ringRadius, 0, Math.PI * 2);
-          ctx.stroke();
-          
-          // Símbolo de alerta (!)
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 16px Arial';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('!', warning.x, warning.y);
-          
-          ctx.globalAlpha = 1;
-        });
+        if (spawnWarnings.length > 0) {
+          spawnWarnings.forEach(warning => {
+            // Círculo pulsante simplificado
+            const pulsePhase = (currentTime % 500) / 500; // Simplificar cálculo
+            const pulseSize = 15 + pulsePhase * 5;
+            const alpha = 0.3 + pulsePhase * 0.2;
+            
+            // Color según tipo de enemigo
+            let warningColor = '#FF0000';
+            if (warning.type === 'fast') warningColor = '#FF00FF';
+            if (warning.type === 'tank') warningColor = '#888888';
+            
+            // Círculo exterior pulsante
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = warningColor;
+            ctx.beginPath();
+            ctx.arc(warning.x, warning.y, pulseSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Círculo interior más sólido
+            ctx.globalAlpha = 0.6;
+            ctx.fillStyle = warningColor;
+            ctx.beginPath();
+            ctx.arc(warning.x, warning.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.globalAlpha = 1;
+          });
+        }
         
         // Dibujar jugador con sprite o fallback
         if (playerSprite) {
-          // Efecto de aura dorada si magnet está activo
-          if (player.magnetActive) {
-            const pulseSize = 80 + Math.sin(Date.now() / 200) * 10;
-            ctx.globalAlpha = 0.3;
-            ctx.fillStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, pulseSize / 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-          }
-          
           playerSprite.draw(ctx, player.x, player.y, 64, 64);
         } else {
-          // Efecto de aura dorada si magnet está activo (fallback)
-          if (player.magnetActive) {
-            const pulseSize = 50 + Math.sin(Date.now() / 200) * 8;
-            ctx.globalAlpha = 0.3;
-            ctx.fillStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.arc(player.x, player.y, pulseSize, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-          }
-          
           ctx.fillStyle = player.knight.color;
           ctx.beginPath();
           ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
@@ -1068,57 +1500,69 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         enemies.forEach(enemy => {
-          ctx.fillStyle = enemy.type === 'fast' ? '#FF00FF' : enemy.type === 'tank' ? '#888' : '#F00';
-          ctx.beginPath();
-          ctx.arc(enemy.x, enemy.y, 12, 0, Math.PI * 2);
-          ctx.fill();
+          // Dibujar sprite si existe, o fallback a círculo
+          if (enemy.sprite) {
+            // Todos los enemigos mismo tamaño que el jugador
+            const size = 64;
+            
+            enemy.sprite.draw(ctx, enemy.x, enemy.y, size, size);
+          } else {
+            // Fallback: círculos con colores según tipo
+            ctx.fillStyle = enemy.type === 'fast' ? '#FF00FF' : enemy.type === 'tank' ? '#888' : '#F00';
+            ctx.beginPath();
+            ctx.arc(enemy.x, enemy.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+          }
           
+          // Barra de vida del enemigo
           ctx.fillStyle = '#0F0';
-          ctx.fillRect(enemy.x - 15, enemy.y - 20, 30, 3);
+          ctx.fillRect(enemy.x - 15, enemy.y - 30, 30, 3);
           ctx.fillStyle = '#F00';
-          ctx.fillRect(enemy.x - 15, enemy.y - 20, 30 * (enemy.health / enemy.maxHealth), 3);
+          ctx.fillRect(enemy.x - 15, enemy.y - 30, 30 * (enemy.health / enemy.maxHealth), 3);
         });
         
         if (boss) {
-          ctx.fillStyle = boss.gold.color;
-          ctx.beginPath();
-          ctx.arc(boss.x, boss.y, 30, 0, Math.PI * 2);
-          ctx.fill();
+          // Dibujar sprite del boss si existe
+          if (boss.sprite) {
+            const bossSize = 96; // Boss más grande que jugador y enemigos
+            boss.sprite.draw(ctx, boss.x, boss.y, bossSize, bossSize);
+          } else {
+            // Fallback: círculo con color del gold saint
+            ctx.fillStyle = boss.gold.color;
+            ctx.beginPath();
+            ctx.arc(boss.x, boss.y, 30, 0, Math.PI * 2);
+            ctx.fill();
+          }
           
+          // Nombre del boss
           ctx.fillStyle = '#FFF';
-          ctx.font = '12px Arial';
+          ctx.font = 'bold 14px Arial';
           ctx.textAlign = 'center';
-          ctx.fillText(boss.gold.name, boss.x, boss.y - 40);
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 3;
+          ctx.strokeText(boss.gold.name, boss.x, boss.y - 55);
+          ctx.fillText(boss.gold.name, boss.x, boss.y - 55);
           
+          // Barra de vida del boss
           ctx.fillStyle = '#0F0';
-          ctx.fillRect(boss.x - 40, boss.y - 50, 80, 5);
+          ctx.fillRect(boss.x - 40, boss.y - 60, 80, 5);
           ctx.fillStyle = '#F00';
-          ctx.fillRect(boss.x - 40, boss.y - 50, 80 * (boss.health / boss.maxHealth), 5);
+          ctx.fillRect(boss.x - 40, boss.y - 60, 80 * (boss.health / boss.maxHealth), 5);
         }
         
         projectiles.forEach(proj => {
-          // Si hay sprite de proyectil y es del jugador, usarlo
+          // Si hay sprite de proyectil y es del jugador, usarlo (sin rotación para mejor performance)
           if (projectileImage && projectileImage.complete && !proj.isEnemy) {
-            ctx.save();
             ctx.imageSmoothingEnabled = false;
             
-            // Trasladar al centro del proyectil
-            ctx.translate(proj.x, proj.y);
-            
-            // Rotar según el ángulo del proyectil
-            ctx.rotate(proj.angle);
-            
-            // Tamaño del proyectil en pantalla
             const displaySize = 24;
             
-            // Dibujar la imagen completa sin recortar
+            // Dibujar sin rotación para mejor rendimiento
             ctx.drawImage(
               projectileImage,
-              -displaySize/2, -displaySize/2, // Posición (centrado)
-              displaySize, displaySize // Tamaño en canvas
+              proj.x - displaySize/2, proj.y - displaySize/2,
+              displaySize, displaySize
             );
-            
-            ctx.restore();
           } else {
             // Fallback para proyectiles enemigos o si no carga la imagen
             ctx.fillStyle = proj.color;
@@ -1131,29 +1575,203 @@ const SaintSeiyaGame: React.FC = () => {
         // Dibujar efectos de ataque
         CombatSystem.drawAttackEffects(ctx);
         
-        // Dibujar drops (cosmos, health, magnet)
-        drops.forEach(drop => {
-          let color = '#0FF'; // Azul brillante para cosmos
-          let size = 5;
-          
-          if (drop.type === 'health') {
-            color = '#0F0'; // Verde para vida
-            size = 6;
-          } else if (drop.type === 'magnet') {
-            color = '#FFD700'; // Dorado para magnet
-            size = 7;
-            // Efecto de brillo para magnet
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+        // Dibujar efectos de ataque del boss (bolas de poder) - limitar a 10 más recientes
+        if (bossAttackImage && bossAttackImage.complete) {
+          const now = Date.now();
+          const recentEffects = bossAttackEffects.slice(-10);
+          recentEffects.forEach(effect => {
+            const age = now - effect.createdAt;
+            if (age < 0) return; // No dibujar si aún no ha comenzado (delay)
+            
+            const progress = age / effect.duration;
+            
+            // Animación de la bola: crece, se mueve y hace fade out
+            const pulse = Math.sin(progress * Math.PI * 6) * 0.2; // Pulsación rápida
+            const scale = effect.scale * (0.8 + pulse);
+            const size = 50 * scale;
+            
+            // Movimiento hacia el objetivo con aceleración
+            const easeProgress = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+            const currentX = effect.x + (effect.targetX - effect.x) * easeProgress * 0.5;
+            const currentY = effect.y + (effect.targetY - effect.y) * easeProgress * 0.5;
+            
+            // Opacidad: fade in rápido, luego fade out suave
+            const opacity = progress < 0.1 ? progress / 0.1 : 
+                           progress > 0.7 ? 1 - ((progress - 0.7) / 0.3) : 1;
+            
+            ctx.save();
+            ctx.globalAlpha = opacity;
+            ctx.imageSmoothingEnabled = false;
+            
+            // Trail de partículas simplificado (solo 2 en lugar de 3)
+            for (let i = 1; i <= 2; i++) {
+              const trailProgress = Math.max(0, progress - i * 0.15);
+              const trailX = effect.x + (effect.targetX - effect.x) * trailProgress * 0.5;
+              const trailY = effect.y + (effect.targetY - effect.y) * trailProgress * 0.5;
+              const trailOpacity = opacity * (1 - i * 0.3);
+              const trailSize = size * (1 - i * 0.25);
+              
+              ctx.globalAlpha = trailOpacity * 0.3;
+              ctx.fillStyle = 'rgba(200, 100, 255, ' + (trailOpacity * 0.4) + ')';
+              ctx.beginPath();
+              ctx.arc(trailX, trailY, trailSize, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            
+            // Glow exterior principal (resplandor intenso)
+            ctx.globalAlpha = opacity;
+            const glowSize = size * 1.8;
+            const gradient = ctx.createRadialGradient(
+              currentX, currentY, 0,
+              currentX, currentY, glowSize
+            );
+            gradient.addColorStop(0, 'rgba(255, 120, 255, ' + (opacity * 0.9) + ')');
+            gradient.addColorStop(0.4, 'rgba(220, 80, 255, ' + (opacity * 0.6) + ')');
+            gradient.addColorStop(0.7, 'rgba(180, 40, 255, ' + (opacity * 0.3) + ')');
+            gradient.addColorStop(1, 'rgba(150, 0, 255, 0)');
+            
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(drop.x, drop.y, size + 5, 0, Math.PI * 2);
+            ctx.arc(currentX, currentY, glowSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Anillo de energía giratorio
+            ctx.globalAlpha = opacity * 0.6;
+            ctx.strokeStyle = 'rgba(255, 200, 255, ' + opacity + ')';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(currentX, currentY, size * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Dibujar el sprite de ataque con rotación continua
+            ctx.globalAlpha = opacity;
+            ctx.translate(currentX, currentY);
+            ctx.rotate(age / 80); // Rotación más rápida
+            ctx.drawImage(
+              bossAttackImage,
+              -size/2, -size/2,
+              size, size
+            );
+            
+            ctx.restore();
+            
+            // Partículas orbitando (reducidas a 3)
+            for (let i = 0; i < 3; i++) {
+              const particleAngle = (age / 200) + (i * Math.PI / 2);
+              const particleRadius = size * 0.7;
+              const particleX = currentX + Math.cos(particleAngle) * particleRadius;
+              const particleY = currentY + Math.sin(particleAngle) * particleRadius;
+              
+              ctx.save();
+              ctx.globalAlpha = opacity * 0.7;
+              ctx.fillStyle = 'rgba(255, 180, 255, ' + (opacity * 0.8) + ')';
+              ctx.beginPath();
+              ctx.arc(particleX, particleY, 3, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+          });
+        }
+        
+        // Dibujar drops (cosmos, health)
+        drops.forEach(drop => {
+          if (drop.type === 'health') {
+            // Efecto de cruz para health
+            ctx.fillStyle = '#0F0'; // Verde para vida
+            ctx.fillRect(drop.x - 6, drop.y - 2, 12, 4);
+            ctx.fillRect(drop.x - 2, drop.y - 6, 4, 12);
+          } else {
+            // Cosmos (orbe azul circular)
+            ctx.fillStyle = '#0FF'; // Azul brillante para cosmos
+            ctx.beginPath();
+            ctx.arc(drop.x, drop.y, 5, 0, Math.PI * 2);
             ctx.fill();
           }
-          
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(drop.x, drop.y, size, 0, Math.PI * 2);
-          ctx.fill();
         });
+        
+        // Dibujar advertencias de super ataque del boss (SIMPLIFICADO para mejor rendimiento)
+        if (bossSuperAttackWarnings.length > 0) {
+          const now = Date.now();
+          bossSuperAttackWarnings.forEach(warning => {
+            const age = now - warning.createdAt;
+            
+            // Efecto de parpadeo simple
+            const pulse = Math.sin(age / 80) * 0.5 + 0.5;
+            const alpha = 0.3 + pulse * 0.3;
+            
+            ctx.save();
+            ctx.translate(warning.x, warning.y);
+            ctx.rotate(warning.angle);
+            
+            // Rectángulo rojo simple (sin gradientes)
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#FF3333';
+            ctx.fillRect(-warning.width / 2, -warning.height / 2, warning.width, warning.height);
+            
+            // Borde
+            ctx.globalAlpha = 0.8;
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-warning.width / 2, -warning.height / 2, warning.width, warning.height);
+            
+            ctx.restore();
+          });
+        }
+        
+        // Dibujar super ataques activos del boss (ULTRA-SIMPLIFICADO)
+        if (bossSuperAttacks.length > 0 && bossSuperAttackSprites.length === 3) {
+          const now = Date.now();
+          bossSuperAttacks.forEach(attack => {
+            const age = now - attack.createdAt;
+            const progress = age / attack.duration;
+            
+            ctx.save();
+            ctx.translate(attack.x, attack.y);
+            ctx.rotate(attack.angle);
+            
+            const scale = 0.8 + progress * 0.4;
+            const alpha = 1 - progress;
+            
+            // Seleccionar frame
+            const frameIndex = Math.min(2, Math.floor(progress * 3));
+            const sprite = bossSuperAttackSprites[frameIndex];
+            
+            if (sprite && sprite.complete) {
+              ctx.globalAlpha = alpha;
+              ctx.imageSmoothingEnabled = false;
+              ctx.drawImage(
+                sprite,
+                -attack.width / 2 * scale,
+                -attack.height / 2 * scale,
+                attack.width * scale,
+                attack.height * scale
+              );
+            } else {
+              // Fallback simple
+              ctx.globalAlpha = alpha * 0.7;
+              ctx.fillStyle = '#FF6600';
+              ctx.fillRect(
+                -attack.width / 2 * scale, 
+                -attack.height / 2 * scale, 
+                attack.width * scale, 
+                attack.height * scale
+              );
+            }
+            
+            // Borde simple
+            ctx.globalAlpha = alpha;
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(
+              -attack.width / 2 * scale, 
+              -attack.height / 2 * scale, 
+              attack.width * scale, 
+              attack.height * scale
+            );
+            
+            ctx.restore();
+          });
+        }
         
         // Restaurar estado del canvas (volver a coordenadas de pantalla)
         ctx.restore();
@@ -1165,7 +1783,7 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillRect(10, 10, 200 * (player.health / player.maxHealth), 20);
         
         // Barra de Cosmos (reemplaza exp)
-        const cosmosRequired = Math.floor(100 * Math.pow(player.level, 1.5));
+        const cosmosRequired = 10 + ((player.level - 1) * 5);
         ctx.fillStyle = '#00F';
         ctx.fillRect(10, 35, 200, 10);
         ctx.fillStyle = '#0FF';
@@ -1193,21 +1811,6 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px Arial';
         ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
-        
-        // Combo
-        if (player.combo > 0) {
-          ctx.fillStyle = '#FF00FF';
-          ctx.font = 'bold 24px Arial';
-          ctx.textAlign = 'center';
-          ctx.fillText(`COMBO x${player.combo}`, WIDTH / 2, HEIGHT - 30);
-          
-          // Barra de combo timer
-          const comboBarWidth = 200;
-          ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
-          ctx.fillRect(WIDTH / 2 - comboBarWidth / 2, HEIGHT - 10, comboBarWidth, 5);
-          ctx.fillStyle = '#FF00FF';
-          ctx.fillRect(WIDTH / 2 - comboBarWidth / 2, HEIGHT - 10, comboBarWidth * (player.comboTimer / 3000), 5);
-        }
       }
       
       animationFrameId = requestAnimationFrame(render);
@@ -1220,58 +1823,9 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [player, enemies, boss, projectiles, drops, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake]);
+  }, [gameStarted, player, enemies, boss, projectiles, drops, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites]);
 
-  if (!gameStarted) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        minHeight: '100vh',
-        backgroundColor: '#111',
-        color: '#fff',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <h1 style={{ fontSize: '3rem', marginBottom: '2rem', color: '#FFD700' }}>
-          Saint Seiya: Las 12 Casas
-        </h1>
-        <h2 style={{ marginBottom: '2rem' }}>Selecciona tu Caballero de Bronce</h2>
-        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {BRONZE_KNIGHTS.map(knight => (
-            <div
-              key={knight.id}
-              onClick={() => selectKnight(knight)}
-              style={{
-                padding: '1.5rem',
-                border: `3px solid ${knight.color}`,
-                borderRadius: '10px',
-                cursor: 'pointer',
-                backgroundColor: '#222',
-                transition: 'transform 0.2s',
-                width: '200px'
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-            >
-              <h3 style={{ color: knight.color, marginBottom: '1rem' }}>{knight.name}</h3>
-              <p><strong>Ataque:</strong> {knight.attack}</p>
-              <p><strong>Velocidad:</strong> {knight.speed}</p>
-              <p><strong>Daño:</strong> {knight.damage}</p>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: '3rem', maxWidth: '600px', textAlign: 'center' }}>
-          <h3>Controles:</h3>
-          <p>WASD o Flechas - Movimiento</p>
-          <p>Disparo automático</p>
-          <p>Derrota enemigos para subir de nivel y mejorar</p>
-          <p>¡Atraviesa las 12 Casas del Santuario!</p>
-        </div>
-      </div>
-    );
-  }
+  // Sin menú de selección - el juego comienza automáticamente
 
   if (gameState === 'levelup') {
     return (

@@ -112,3 +112,27 @@ export interface WaveConfig {
   spawnDelay: number;
   difficultyMultiplier: number;
 }
+
+export interface BossSuperAttackWarning {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle: number;
+  createdAt: number;
+  warningDuration: number;
+  executionTime: number;
+}
+
+export interface BossSuperAttack {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle: number;
+  damage: number;
+  createdAt: number;
+  duration: number;
+}

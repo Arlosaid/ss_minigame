@@ -135,15 +135,15 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
     // Cargar frames de idle
     console.log('Loading idle frames...');
     const idleFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/player_idle.png'
+      '/sprites/player/seiya/player_idle.png'
     ]);
     console.log('Idle frames loaded:', idleFrames.length);
 
     // Cargar frames de caminar (solo 2 frames)
     console.log('Loading walk frames...');
     const walkPaths = [
-      '/sprites/player/player_walk_1.png',
-      '/sprites/player/player_walk_2.png'
+      '/sprites/player/seiya/player_walk_1.png',
+      '/sprites/player/seiya/player_walk_2.png'
     ];
     
     // Cargar walk frames con fallback
@@ -161,10 +161,10 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
     // Cargar frames de ataque
     console.log('Loading attack frames...');
     const attackFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/player_attack_1.png',
-      '/sprites/player/player_attack_2.png',
-      '/sprites/player/player_attack_3.png',
-      '/sprites/player/player_attack_4.png'
+      '/sprites/player/seiya/player_attack_1.png',
+      '/sprites/player/seiya/player_attack_2.png',
+      '/sprites/player/seiya/player_attack_3.png',
+      '/sprites/player/seiya/player_attack_4.png'
     ]);
     console.log('Attack frames loaded:', attackFrames.length);
 
@@ -201,20 +201,88 @@ export async function createEnemySprite(_type?: string): Promise<AnimatedSprite>
   const sprite = new AnimatedSprite();
 
   try {
-    // Por ahora usar los mismos sprites, pero podrías cargar diferentes según el tipo
-    const frames = await SpriteManager.loadMultiple([
-      '/sprites/player/player_idle.png'
+    console.log('Creating enemy sprite...');
+    
+    // Cargar frames de caminar del enemigo (animación loop)
+    const walkFrames = await SpriteManager.loadMultiple([
+      '/sprites/player/enemy_1/enemy_walk_2.png',
+      '/sprites/player/enemy_1/enemy_walk_3.png',
+      '/sprites/player/enemy_1/enemy_walk_4.png'
     ]);
+    console.log('Enemy walk frames loaded:', walkFrames.length);
 
-    sprite.addAnimation('idle', {
-      frames: frames,
-      frameRate: 2,
+    sprite.addAnimation('walk', {
+      frames: walkFrames,
+      frameRate: 8,
       loop: true
     });
 
-    sprite.setAnimation('idle');
+    sprite.setAnimation('walk');
+    console.log('Enemy sprite created successfully');
   } catch (error) {
     console.error('Error loading enemy sprites:', error);
+  }
+
+  return sprite;
+}
+
+export async function createBossSprite(): Promise<AnimatedSprite> {
+  const sprite = new AnimatedSprite();
+
+  try {
+    console.log('Creating boss sprite...');
+    
+    // Cargar frames de idle/walk del boss
+    console.log('Loading boss idle frames...');
+    const idleFrames = await SpriteManager.loadMultiple([
+      '/sprites/player/boss/boss_walk_1.png',
+      '/sprites/player/boss/boss_walk_2.png'
+    ]);
+    console.log('Boss idle frames loaded:', idleFrames.length);
+
+    // Cargar frames de caminar (animación completa)
+    console.log('Loading boss walk frames...');
+    const walkFrames = await SpriteManager.loadMultiple([
+      '/sprites/player/boss/boss_walk_1.png',
+      '/sprites/player/boss/boss_walk_2.png',
+      '/sprites/player/boss/boss_walk_3.png',
+      '/sprites/player/boss/boss_walk_4.png'
+    ]);
+    console.log('Boss walk frames loaded:', walkFrames.length);
+
+    // Cargar frames de ataque (usar walk frames como animación de ataque)
+    console.log('Loading boss attack frames...');
+    const attackFrames = await SpriteManager.loadMultiple([
+      '/sprites/player/boss/boss_walk_3.png',
+      '/sprites/player/boss/boss_walk_4.png',
+      '/sprites/player/boss/boss_walk_1.png',
+      '/sprites/player/boss/boss_walk_2.png'
+    ]);
+    console.log('Boss attack frames loaded:', attackFrames.length);
+
+    // Agregar animaciones
+    sprite.addAnimation('idle', {
+      frames: idleFrames,
+      frameRate: 4,
+      loop: true
+    });
+
+    sprite.addAnimation('walk', {
+      frames: walkFrames,
+      frameRate: 8,
+      loop: true
+    });
+
+    sprite.addAnimation('attack', {
+      frames: attackFrames,
+      frameRate: 15,
+      loop: false
+    });
+
+    sprite.setAnimation('idle');
+    console.log('Boss sprite created successfully');
+  } catch (error) {
+    console.error('Error loading boss sprites:', error);
   }
 
   return sprite;
