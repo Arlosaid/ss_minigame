@@ -14,8 +14,8 @@ export const PLAYER_CONFIG = {
   SPEED_UPGRADE_MULTIPLIER: 0.5, // Multiplicador por nivel de upgrade de velocidad
   
   // Combate
-  BASE_DAMAGE: 35, // Daño base del jugador (aumentado de 18 para balancear)
-  DAMAGE_UPGRADE_BONUS: 10, // Daño adicional por nivel de upgrade (doblado de 5)
+  BASE_DAMAGE: 30, // Daño base del jugador - ajustado para one-shot inicial
+  DAMAGE_UPGRADE_BONUS: 8, // Daño adicional por nivel de upgrade
   
   // Disparo
   BASE_FIRE_RATE: 500, // Milisegundos entre disparos
@@ -29,14 +29,14 @@ export const PLAYER_CONFIG = {
   MAX_PROJECTILES: 30, // Límite de proyectiles simultáneos
   
   // Vida
-  STARTING_HEALTH: 150, // Aumentado de 100 para sobrevivir hordas
-  STARTING_MAX_HEALTH: 150,
-  MAX_HEALTH_UPGRADE_BONUS: 100, // HP adicional por nivel de upgrade de vida (aumentado de 75)
+  STARTING_HEALTH: 100, // Vida inicial balanceada para progresión
+  STARTING_MAX_HEALTH: 100,
+  MAX_HEALTH_UPGRADE_BONUS: 50, // HP adicional por nivel de upgrade
   
   // Progresión
   STARTING_LEVEL: 1,
-  BASE_COSMOS_REQUIRED: 10, // Cosmos requerido para nivel 1
-  COSMOS_INCREMENT_PER_LEVEL: 5, // Incremento de cosmos requerido por nivel
+  BASE_COSMOS_REQUIRED: 8, // Cosmos requerido para nivel 1 - más rápido
+  COSMOS_INCREMENT_PER_LEVEL: 4, // Incremento de cosmos requerido por nivel - progresión más rápida
 } as const;
 
 // ============================================
@@ -44,54 +44,54 @@ export const PLAYER_CONFIG = {
 // ============================================
 export const ENEMY_CONFIG = {
   // Spawn
-  BASE_SPAWN_INTERVAL: 1500, // Milisegundos entre spawns (oleada 1) - Reducido de 2500ms
-  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 150, // Reducción del intervalo por oleada - Aumentado para progresión rápida
-  MIN_SPAWN_INTERVAL: 300, // Intervalo mínimo (ms) - SPAWN MASIVO cada 0.3s
+  BASE_SPAWN_INTERVAL: 1200, // Milisegundos entre spawns (oleada 1) - frecuente
+  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 100, // Reducción del intervalo por oleada - progresión moderada
+  MIN_SPAWN_INTERVAL: 400, // Intervalo mínimo (ms) - spawn constante
   SPAWN_DISTANCE_MIN: 350, // Distancia mínima de spawn desde el jugador
   SPAWN_DISTANCE_MAX: 500, // Distancia máxima de spawn desde el jugador
-  WARNING_DURATION: 500, // Duración de la advertencia de spawn (ms) - Reducido para spawns rápidos
+  WARNING_DURATION: 500, // Duración de la advertencia de spawn (ms) - reducido para spawns rápidos
   
   // Límites
-  BASE_MAX_ACTIVE_ENEMIES: 15, // Máximo de enemigos activos en oleada 1 - HORDAS GRANDES
-  MAX_ACTIVE_ENEMIES_INCREMENT: 3, // Incremento por oleada - Progresión agresiva
-  MAX_ACTIVE_ENEMIES_CAP: 30, // Máximo absoluto de enemigos - HORDAS MASIVAS
-  MAX_WARNINGS: 15, // Máximo de advertencias de spawn simultáneas - AUMENTADO PARA SPAWNS MASIVOS
+  BASE_MAX_ACTIVE_ENEMIES: 12, // Máximo de enemigos activos en oleada 1 - oleadas manejables
+  MAX_ACTIVE_ENEMIES_INCREMENT: 2, // Incremento por oleada - progresión gradual
+  MAX_ACTIVE_ENEMIES_CAP: 25, // Máximo absoluto de enemigos - hordas grandes pero no abrumadoras
+  MAX_WARNINGS: 10, // Máximo de advertencias de spawn simultáneas
   CLEANUP_DISTANCE: 1200, // Distancia para limpiar enemigos lejanos
   
-  // Escalado de dificultad
-  HP_MULTIPLIER_PER_WAVE: 0.25, // +25% HP por oleada (aumentado de 0.12 para enemigos más resistentes)
-  SPEED_MULTIPLIER_PER_WAVE: 0.08, // +8% velocidad por oleada (aumentado de 0.05)
+  // Escalado de dificultad - PROGRESIÓN SUAVE Y DIVERTIDA
+  HP_MULTIPLIER_PER_WAVE: 0.15, // +15% HP por oleada - escalado más suave
+  SPEED_MULTIPLIER_PER_WAVE: 0.05, // +5% velocidad por oleada - enemigos más predecibles
   
-  // Tipos de enemigos
+  // Tipos de enemigos - ONE-SHOT INICIAL Y ESCALADO PROGRESIVO
   NORMAL: {
-    BASE_HP: 45, // Triplicado de 15 para enemigos más resistentes
-    HP_PER_WAVE: 10, // Triplicado de 3 para escalado agresivo
-    SPEED: 1.0, // Aumentado de 0.85 para más agresividad
-    COSMOS_MIN: 2,
-    COSMOS_MAX: 4,
+    BASE_HP: 30, // Muere con 1 golpe inicial (BASE_DAMAGE=30)
+    HP_PER_WAVE: 8, // Escalado moderado
+    SPEED: 0.85, // Velocidad base normal
+    COSMOS_MIN: 3, // Aumentado para progresión más rápida
+    COSMOS_MAX: 5, // Aumentado para progresión más rápida
   },
   FAST: {
-    BASE_HP: 30, // Triplicado de 10
-    HP_PER_WAVE: 6, // Triplicado de 2
-    SPEED: 1.8, // Aumentado de 1.6 para enemigos rápidos más peligrosos
-    COSMOS_MIN: 3,
-    COSMOS_MAX: 5,
+    BASE_HP: 25, // Rápido y frágil
+    HP_PER_WAVE: 6, // Escalado menor
+    SPEED: 1.5, // Rápido pero no imposible de esquivar
+    COSMOS_MIN: 4, // Aumentado
+    COSMOS_MAX: 7, // Aumentado
     UNLOCK_WAVE: 2, // Se desbloquea en oleada 2
   },
   TANK: {
-    BASE_HP: 90, // Triplicado de 30 - verdaderos tanques
-    HP_PER_WAVE: 15, // Triplicado de 5
-    SPEED: 0.6, // Aumentado de 0.45 para que tanks sean más amenazantes
-    COSMOS_MIN: 5,
-    COSMOS_MAX: 8,
+    BASE_HP: 60, // Tank inicial requiere 2 golpes
+    HP_PER_WAVE: 12, // Escalado mayor
+    SPEED: 0.5, // Lento pero resistente
+    COSMOS_MIN: 7, // Aumentado
+    COSMOS_MAX: 10, // Aumentado
     UNLOCK_WAVE: 3, // Se desbloquea en oleada 3
   },
   
   // Comportamiento
-  BASE_MOVEMENT_SPEED: 150, // Píxeles por segundo - Aumentado para enemigos más agresivos
+  BASE_MOVEMENT_SPEED: 130, // Píxeles por segundo - balanceado
   COLLISION_RADIUS: 30, // Radio de colisión con jugador
   PROJECTILE_HIT_RADIUS: 30, // Radio de colisión con proyectiles
-  DAMAGE_TO_PLAYER: 15, // Daño al tocar al jugador (triplicado de 5 para amenaza real)
+  DAMAGE_TO_PLAYER: 10, // Daño al tocar al jugador - balanceado para sobrevivir
 } as const;
 
 // ============================================
@@ -99,11 +99,11 @@ export const ENEMY_CONFIG = {
 // ============================================
 export const BOSS_CONFIG = {
   // Aparición
-  SPAWN_TIME: 120, // Segundos después de iniciar el stage (2 minutos)
+  SPAWN_TIME: 180, // Segundos después de iniciar el stage (3 minutos)
   
   // Estadísticas
-  BASE_HP: 1500, // Triplicado de 500 para boss más desafiante
-  HP_INCREMENT_PER_HOUSE: 500, // HP adicional por cada casa (aumentado de 200)
+  BASE_HP: 1200, // HP balanceado para ser desafiante pero vencible
+  HP_INCREMENT_PER_HOUSE: 400, // HP adicional por cada casa subsecuente
   COLLISION_RADIUS: 50,
   
   // Ataques
@@ -117,10 +117,10 @@ export const BOSS_CONFIG = {
   PROJECTILE_SPEED_FAST: 4, // Velocidad rápida (patrón direccional)
   
   // Daño
-  REGULAR_PROJECTILE_DAMAGE_LOW: 20, // Patrón espiral (doblado de 10)
-  REGULAR_PROJECTILE_DAMAGE_MEDIUM: 30, // Patrón circular (doblado de 15)
-  REGULAR_PROJECTILE_DAMAGE_HIGH: 40, // Patrón direccional (doblado de 20)
-  SUPER_ATTACK_DAMAGE: 50, // Daño del super ataque (aumentado de 30)
+  REGULAR_PROJECTILE_DAMAGE_LOW: 15, // Patrón espiral - esquivable
+  REGULAR_PROJECTILE_DAMAGE_MEDIUM: 20, // Patrón circular - moderado
+  REGULAR_PROJECTILE_DAMAGE_HIGH: 25, // Patrón direccional - alto pero justo
+  SUPER_ATTACK_DAMAGE: 35, // Daño del super ataque - peligroso pero no one-shot
   
   // Super Ataque
   SUPER_ATTACK_WARNING_DURATION: 1500, // Duración de advertencia (ms)
@@ -129,9 +129,9 @@ export const BOSS_CONFIG = {
   SUPER_ATTACK_HEIGHT: 400,
   
   // Recompensas
-  COSMOS_REWARD_MIN: 40,
-  COSMOS_REWARD_MAX: 50,
-  SCORE_REWARD: 1000,
+  COSMOS_REWARD_MIN: 100, // Gran recompensa por derrotar al boss
+  COSMOS_REWARD_MAX: 150, // Suficiente para varias mejoras
+  SCORE_REWARD: 5000, // Score satisfactorio
 } as const;
 
 // ============================================
@@ -176,8 +176,10 @@ export const PROJECTILE_CONFIG = {
 // 🌊 CONFIGURACIÓN DE OLEADAS
 // ============================================
 export const WAVE_CONFIG = {
-  ENEMIES_TO_KILL_PER_WAVE: 40, // Enemigos a matar para avanzar de oleada - Aumentado para oleadas más largas
+  ENEMIES_TO_KILL_PER_WAVE: 30, // Enemigos a matar para avanzar de oleada - balanceado
   SPECIAL_ENEMY_CHANCE_AFTER_WAVE_5: 0.3, // 30% de enemigos especiales en oleadas altas
+  POST_BOSS_DIFFICULTY_MULTIPLIER: 1.5, // Multiplicador de dificultad después del primer boss
+  BOSS_DEFEATED_WAVE_INCREMENT: 5, // Incremento de oleada al derrotar al boss
 } as const;
 
 // ============================================
@@ -219,14 +221,32 @@ export const VISUAL_CONFIG = {
 // ⚡ CONFIGURACIÓN DE PODERES ESPECIALES
 // ============================================
 export const POWER_CONFIG = {
-  // Rayo de Zeus
+  // ⚡ Rayo de Zeus (Zeus's Lightning)
   LIGHTNING_DISTANCE_BASE: 120, // Distancia base de los rayos (nivel 1)
   LIGHTNING_DISTANCE_INCREMENT: 40, // Incremento por nivel
   LIGHTNING_SPAWN_HEIGHT: 400, // Altura desde donde cae el rayo (reducido de 500)
   LIGHTNING_DELAY: 100, // Delay entre rayos (reducido de 120ms)
-  LIGHTNING_DAMAGE_RADIUS: 50, // Radio de daño - ajustado para ser más preciso (antes 70-80)
+  LIGHTNING_DAMAGE_RADIUS: 60, // Radio de daño - balanceado para utilidad sin ser OP (antes 75)
   LIGHTNING_DURATION: 400, // Duración del efecto visual (reducido de 500ms)
   LIGHTNING_IMPACT_DURATION: 500, // Duración de la explosión (reducido de 700ms)
+  
+  // 🏹 Flecha de Oro (Golden Arrow)
+  GOLDEN_ARROW_BASE_DAMAGE: 40, // Daño base de la flecha (nivel 1)
+  GOLDEN_ARROW_DAMAGE_INCREMENT: 15, // Incremento de daño por nivel
+  GOLDEN_ARROW_SPEED: 800, // Velocidad de la flecha (px/segundo)
+  GOLDEN_ARROW_RANGE: 400, // Rango máximo de búsqueda de enemigos
+  GOLDEN_ARROW_LIFETIME: 2000, // Duración máxima de la flecha (ms)
+  GOLDEN_ARROW_SIZE: 32, // Tamaño visual de la flecha
+  GOLDEN_ARROW_TRAIL_LENGTH: 5, // Longitud del trail dorado
+  
+  // 🛡️ Escudo de Atena (Athena's Shield)
+  SHIELD_BASE_DURATION: 2000, // Duración base del escudo (ms) - nivel 1
+  SHIELD_DURATION_INCREMENT: 500, // Incremento de duración por nivel
+  SHIELD_BASE_ABSORPTION: 30, // Daño absorbido base (nivel 1)
+  SHIELD_ABSORPTION_INCREMENT: 15, // Incremento de absorción por nivel
+  SHIELD_RADIUS: 60, // Radio visual del escudo
+  SHIELD_ROTATION_SPEED: 2, // Velocidad de rotación del escudo (rad/segundo)
+  SHIELD_REFLECT_DAMAGE_MULTIPLIER: 0.5, // Porcentaje de daño reflejado (50%)
 } as const;
 
 // ============================================

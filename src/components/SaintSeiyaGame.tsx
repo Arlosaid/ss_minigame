@@ -1063,6 +1063,7 @@ const SaintSeiyaGame: React.FC = () => {
                 const newHealth = b.health - proj.damage;
                 
                 if (newHealth <= 0) {
+                  // ⭐ DROP GENEROSO DE COSMOS AL DERROTAR AL BOSS
                   newDrops.push({
                     id: nextOrbId.current++,
                     x: b.x, y: b.y,
@@ -1071,13 +1072,23 @@ const SaintSeiyaGame: React.FC = () => {
                     lifetime: DROPS_CONFIG.COSMOS_LIFETIME
                   });
                   addScore += BOSS_CONFIG.SCORE_REWARD;
+                  
+                  // 🔄 SISTEMA POST-BOSS: Continuar con oleadas más difíciles
                   setCurrentHouse(h => h + 1);
-                  setWaveNumber(1);
+                  // Incrementar oleada significativamente para mayor dificultad
+                  setWaveNumber(w => w + WAVE_CONFIG.BOSS_DEFEATED_WAVE_INCREMENT);
                   setWaveKills(0);
                   setGameState('houseclear');
+                  
+                  // Reiniciar tiempo de stage para próximo boss en 3 minutos
+                  stageStartTime.current = Date.now();
+                  stageTimeRef.current = 0;
+                  
                   setTimeout(() => {
+                    setGameState('playing');
                     if (currentHouse + 1 < GOLD_SAINTS.length) {
-                      spawnBoss();
+                      // El siguiente boss spawneará automáticamente a los 3 minutos
+                      // Mientras tanto, continúan las oleadas progresivamente más difíciles
                     }
                   }, 3000);
                   return null;
@@ -1924,14 +1935,38 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillText(`Enemigos eliminados: ${waveKills}`, 10, 75);
         ctx.fillText(`Enemigos activos: ${enemies.length}`, 10, 90);
         
-        // Timer del stage
+        // Timer del stage con indicador de boss
         const minutes = Math.floor(stageTime / 60);
         const seconds = stageTime % 60;
-        const timeColor = stageTime >= 180 ? '#0F0' : '#FFF';
+        const timeUntilBoss = Math.max(0, BOSS_CONFIG.SPAWN_TIME - stageTime);
+        const minutesUntilBoss = Math.floor(timeUntilBoss / 60);
+        const secondsUntilBoss = Math.floor(timeUntilBoss % 60);
+        
+        // Color basado en proximidad del boss
+        let timeColor = '#FFF';
+        if (boss) {
+          timeColor = '#FF0000'; // Rojo si el boss está activo
+        } else if (timeUntilBoss <= 30) {
+          timeColor = '#FF4444'; // Rojo si falta menos de 30s
+        } else if (timeUntilBoss <= 60) {
+          timeColor = '#FFAA00'; // Naranja si falta menos de 1 minuto
+        }
+        
         ctx.fillStyle = timeColor;
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(`⏱ ${minutes}:${seconds.toString().padStart(2, '0')}`, WIDTH / 2, 30);
+        
+        // Mostrar countdown hasta el boss si no ha aparecido
+        if (!boss && timeUntilBoss > 0) {
+          ctx.fillStyle = timeColor;
+          ctx.font = '14px Arial';
+          ctx.fillText(`⚔️ Boss en ${minutesUntilBoss}:${secondsUntilBoss.toString().padStart(2, '0')}`, WIDTH / 2, 70);
+        } else if (boss) {
+          ctx.fillStyle = '#FF0000';
+          ctx.font = 'bold 16px Arial';
+          ctx.fillText(`⚔️ ¡${boss.gold.name}!`, WIDTH / 2, 70);
+        }
         
         // Oleada actual
         ctx.fillStyle = '#FFD700';

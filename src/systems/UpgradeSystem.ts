@@ -33,6 +33,56 @@ export class UpgradeSystem {
           player.activePowers.push(newPower);
         }
       }
+    },
+    {
+      id: 'golden_arrow',
+      name: 'Flecha de Oro',
+      description: 'Dispara flechas divinas que buscan automáticamente a los enemigos cercanos',
+      icon: '🏹',
+      tier: 1,
+      type: 'power',
+      maxLevel: 5,
+      apply: (player: Player) => {
+        const existingPower = player.activePowers.find(p => p.id === 'golden_arrow');
+        
+        if (existingPower) {
+          existingPower.level = Math.min(existingPower.level + 1, 5);
+          existingPower.cooldown = PowerSystem.getGoldenArrowCooldown(existingPower.level);
+        } else {
+          const newPower: ActivePower = {
+            id: 'golden_arrow',
+            level: 1,
+            lastTrigger: 0,
+            cooldown: PowerSystem.getGoldenArrowCooldown(1)
+          };
+          player.activePowers.push(newPower);
+        }
+      }
+    },
+    {
+      id: 'athena_shield',
+      name: 'Escudo de Atena',
+      description: 'Crea un escudo protector que absorbe daño y lo refleja a los enemigos',
+      icon: '🛡️',
+      tier: 1,
+      type: 'power',
+      maxLevel: 5,
+      apply: (player: Player) => {
+        const existingPower = player.activePowers.find(p => p.id === 'athena_shield');
+        
+        if (existingPower) {
+          existingPower.level = Math.min(existingPower.level + 1, 5);
+          existingPower.cooldown = PowerSystem.getAthenaShieldCooldown(existingPower.level);
+        } else {
+          const newPower: ActivePower = {
+            id: 'athena_shield',
+            level: 1,
+            lastTrigger: 0,
+            cooldown: PowerSystem.getAthenaShieldCooldown(1)
+          };
+          player.activePowers.push(newPower);
+        }
+      }
     }
   ];
 

@@ -84,5 +84,7 @@ export const UPGRADES: Upgrade[] = [
   { id: 'pierce', name: 'Alcance Cósmico', desc: '+25% Rango de ataque', icon: '🎯', levels: [1, 2, 3, 4, 5] },
   { id: 'maxHealth', name: 'Armadura Divina', desc: '+75 HP Máximo', icon: '💚', levels: [75, 150, 225, 300, 375] },
   { id: 'explosion', name: 'Explosión de Cosmos', desc: 'Área de daño al impactar', icon: '💥', levels: [30, 50, 80, 120, 150] },
-  { id: 'lightning', name: 'Rayo de Zeus', desc: 'Truenos divinos caen hacia donde miras', icon: '⚡', levels: [1, 2, 3, 4, 5] }
+  { id: 'lightning', name: 'Rayo de Zeus', desc: 'Truenos divinos caen hacia donde miras', icon: '⚡', levels: [1, 2, 3, 4, 5] },
+  { id: 'goldenArrow', name: 'Flecha de Oro', desc: 'Flechas divinas buscan enemigos cercanos', icon: '🏹', levels: [1, 2, 3, 4, 5] },
+  { id: 'athenaShield', name: 'Escudo de Atena', desc: 'Escudo protector que absorbe y refleja daño', icon: '🛡️', levels: [1, 2, 3, 4, 5] }
 ];

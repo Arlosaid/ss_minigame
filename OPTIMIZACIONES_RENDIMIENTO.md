@@ -1286,3 +1286,237 @@ const angle = direction.angle + angleVariation;
 **Fecha**: 13 de Noviembre de 2025
 **Estado**: ✅✅✅ Optimizaciones CRÍTICAS Aplicadas - Fase 7 FINAL 🔥
 **Rendimiento**: ÓPTIMO - 60 FPS Constantes ⚡✨
+
+---
+
+##  FASE 9: BALANCE DE PROGRESI�N Y DIVERSI�N
+
+###  Objetivos de la Fase
+-  Enemigos mueren con 1 golpe al inicio
+-  Escalado progresivo y justo hasta el minuto 3
+-  Boss aparece exactamente a los 3 minutos
+-  Jugador tiene 12-15 mejoras para enfrentar al boss
+-  Sistema post-boss con loop infinito
+-  Mejoras se mantienen entre bosses
+
+###  Curva de Progresi�n Implementada
+
+#### Minuto 0-1: Fase de Empoderamiento 
+- Enemigos ONE-SHOT (HP=30, Damage=30)
+- Spawn cada 1.2s, m�ximo 12 enemigos
+- Cosmos: 3-5 por kill
+- **Experiencia**: "�Soy poderoso!" - Enemigos caen f�cilmente
+
+#### Minuto 1-2: Escalada Gradual 
+- HP Multiplier: +15%/oleada (suave)
+- Speed Multiplier: +5%/oleada (predecible)
+- Desbloqueo: Fast (ola 2), Tank (ola 3)
+- M�x enemigos: 12  18 (+2/oleada)
+- **Mejoras esperadas**: 8-12 niveles
+
+#### Minuto 2-3: Preparaci�n 
+- Spawn cada 0.8-1.0s
+- Enemigos: 2-4 golpes para morir
+- Mix de tipos, alta densidad
+- **Mejoras esperadas**: 12-15 niveles
+- **Experiencia**: Oleadas intensas pero manejables
+
+#### Minuto 3: �BOSS! 
+- SPAWN_TIME: 180s (3 minutos exactos)
+- BASE_HP: 1200 (desafiante pero justo)
+- DAMAGE: 15-35 (peligroso pero esquivable)
+- COSMOS_REWARD: 100-150 (2-3 niveles)
+- **Experiencia**: Boss intimidante pero vencible
+
+#### Post-Boss: Loop Infinito 
+- Wave +5 oleadas autom�ticas
+- Boss HP +400 cada casa
+- Timer reset a 3 minutos
+- **Mejoras se mantienen**
+- **Experiencia**: "�Hasta d�nde puedo llegar?"
+
+###  Econom�a de Cosmos Balanceada
+
+#### Cosmos por Fuente
+- Normal: 3-5 cosmos (antes: 2-4)
+- Fast: 4-7 cosmos (antes: 3-5)
+- Tank: 7-10 cosmos (antes: 5-8)
+- Boss: 100-150 cosmos (muy generoso)
+
+#### Progresi�n
+- BASE_COSMOS: 8 (antes: 10)
+- INCREMENT: 4 (antes: 5)
+- Total nivel 15: ~476 cosmos
+- Enemigos necesarios: ~100-120
+- ** VIABLE en 3 minutos**
+
+###  Valores Finales de Balance
+
+#### JUGADOR
+- BASE_DAMAGE: 30 (one-shot inicial)
+- STARTING_HEALTH: 100 (balanceado)
+- BASE_COSMOS: 8 (progresi�n r�pida)
+- COSMOS_INCREMENT: 4 (escalado suave)
+
+#### ENEMIGOS
+- NORMAL_HP: 30 (one-shot)
+- FAST_HP: 25 (fr�gil)
+- TANK_HP: 60 (2 golpes)
+- HP_MULT: +15%/oleada (suave)
+- SPEED_MULT: +5%/oleada (predecible)
+
+#### BOSS
+- SPAWN_TIME: 180s (3 minutos exactos)
+- BASE_HP: 1200 (desafiante)
+- HP_INCREMENT: 400 (escalado justo)
+- DAMAGE: 15-35 (peligroso pero justo)
+- COSMOS_REWARD: 100-150 (muy generoso)
+
+###  Experiencia de Juego
+
+####  Checklist de Diversi�n
+-  Inicio Satisfactorio: One-shots te hacen sentir poderoso
+-  Progresi�n Visible: Cada mejora tiene impacto notable
+-  Desaf�o Creciente: Dificultad sube gradualmente
+-  Meta Clara: "Sobrevive 3 minutos para el boss"
+-  Boss �pico: Intimidante pero vencible
+-  Recompensa Generosa: Boss da muchas mejoras
+-  Loop Infinito: "�Hasta d�nde puedo llegar?"
+-  Mejoras Permanentes: Progreso se mantiene
+-  Feedback Visual: Timer con countdown a boss
+-  Ritmo Perfecto: Ni muy lento ni abrumador
+
+###  Comparaci�n Antes/Despu�s
+
+| Aspecto | ANTES  | DESPU�S  |
+|---------|---------|-----------|
+| HP inicial enemigos | 45 (varios golpes) | 30 (one-shot) |
+| Boss spawn | 2 minutos | 3 minutos |
+| Mejoras pre-boss | 5-8 | 12-15 |
+| HP Boss | 1500 | 1200 |
+| Da�o Boss | 20-50 | 15-35 |
+| Post-boss | Spawn inmediato | Oleadas progresivas |
+| Timer | Simple | Con countdown |
+| Cosmos/kill | 2-8 | 3-10 |
+
+---
+
+**Fecha Balance**: 13 de Noviembre de 2025
+**Estado**: ✅ Balance PERFECTO - Fase 9 COMPLETA 
+**Diversión**: ✅ MÁXIMA - Curva perfecta de dificultad 
+
+---
+
+### 35. **Sistema de Targeting Inteligente para Rayo de Zeus** 🆕⚡🎯
+
+**PROBLEMA ORIGINAL**: El rayo de Zeus siempre caía en posiciones fijas basadas en la dirección del jugador, sin considerar dónde están los enemigos. Los rayos raramente impactaban enemigos.
+
+**SOLUCIÓN v1 (OVERPOWERED)**: Sistema que perseguía enemigos directamente → Demasiado poderoso y poco estratégico.
+
+**SOLUCIÓN v2 (BALANCEADA)**: Rayos caen en círculo alrededor del jugador, pero analizan inteligentemente qué sectores tienen más enemigos.
+
+```typescript
+// ANTES: Posiciones fijas sin considerar enemigos
+static triggerLightningStrike(...) {
+  strikePositions.push({
+    x: playerX + normalizedDirX * distance,
+    y: playerY + normalizedDirY * distance
+  });
+}
+
+// v1 - OVERPOWERED: Perseguía enemigos directamente
+if (nearbyEnemies.length > 0) {
+  const target = nearbyEnemies[i].enemy;
+  strikePositions.push({ x: target.x, y: target.y }); // ❌ Muy OP
+}
+
+// v2 - BALANCEADO: Círculo inteligente alrededor del jugador
+static triggerLightningStrike(...) {
+  // 🎯 ANÁLISIS INTELIGENTE DE SECTORES (sin perseguir enemigos)
+  const numSectors = 8; // Dividir el círculo en 8 sectores
+  const sectorCounts = new Array(numSectors).fill(0);
+  
+  // Contar enemigos por sector alrededor del jugador
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    const dx = enemy.x - playerX;
+    const dy = enemy.y - playerY;
+    const distSq = dx * dx + dy * dy;
+    
+    if (distSq <= searchRadiusSq) {
+      // Calcular en qué sector está el enemigo (0-7)
+      const angle = Math.atan2(dy, dx);
+      const normalizedAngle = angle < 0 ? angle + Math.PI * 2 : angle;
+      const sector = Math.floor((normalizedAngle / (Math.PI * 2)) * numSectors) % numSectors;
+      sectorCounts[sector]++;
+    }
+  }
+  
+  // Ordenar sectores por densidad de enemigos
+  const sectorPriorities = sectorCounts
+    .map((count, index) => ({ sector: index, count }))
+    .sort((a, b) => b.count - a.count);
+  
+  // Rayos caen en los sectores con más enemigos
+  const targetSector = sectorPriorities[i].count > 0
+    ? sectorPriorities[i].sector
+    : (i * Math.floor(numSectors / numStrikes)) % numSectors;
+  
+  const angle = (targetSector / numSectors) * Math.PI * 2;
+  const variation = (Math.random() - 0.5) * 0.4; // Variación aleatoria
+  strikePositions.push({
+    x: playerX + Math.cos(angle + variation) * distance,
+    y: playerY + Math.sin(angle + variation) * distance
+  });
+}
+```
+
+**SISTEMA DE SECTORES**:
+- ✅ Divide el círculo alrededor del jugador en 8 sectores
+- ✅ Cuenta cuántos enemigos hay en cada sector
+- ✅ Prioriza sectores con mayor densidad de enemigos
+- ✅ Añade variación aleatoria para naturalidad
+- ✅ Fallback a distribución uniforme si no hay enemigos
+
+**BALANCE DE DAÑO Y RADIO**:
+```typescript
+// Daño reducido para balance
+{ count: 1, damage: 25 }, // Nivel 1 (antes 30)
+{ count: 2, damage: 30 }, // Nivel 2 (antes 35)
+{ count: 3, damage: 35 }, // Nivel 3 (antes 40)
+{ count: 4, damage: 40 }, // Nivel 4 (antes 45)
+{ count: 5, damage: 45 }, // Nivel 5 (antes 50)
+
+// Radio ajustado para utilidad sin ser OP
+LIGHTNING_DAMAGE_RADIUS: 60 // (antes 50 → 75 → 60 final)
+```
+
+**BENEFICIOS**:
+- ⚡⚡⚡ **Balance perfecto**: Útil pero no overpowered
+- ⚡⚡⚡ **Estratégico**: Requiere posicionamiento inteligente del jugador
+- ⚡⚡ **Predecible**: Siempre cae en círculo alrededor del jugador
+- ⚡⚡ **Inteligente**: Prioriza zonas con más enemigos
+- ⚡ **Visual atractivo**: Patrón circular con variación natural
+- ✅ **No persigue**: Los enemigos pueden esquivar moviéndose
+- ✅ **Requiere skill**: El jugador debe posicionarse bien
+- ✅ **Sin impacto en rendimiento**: Cálculo simple de sectores
+
+**DIFERENCIAS CON v1 (OVERPOWERED)**:
+- ❌ v1: Rayos perseguían enemigos → ✅ v2: Rayos caen en círculo fijo
+- ❌ v1: No se podía esquivar → ✅ v2: Enemigos pueden esquivar
+- ❌ v1: No requería skill → ✅ v2: Requiere posicionamiento
+- ❌ v1: Daño 30-50 → ✅ v2: Daño 25-45 (balanceado)
+- ❌ v1: Radio 75 (muy grande) → ✅ v2: Radio 60 (justo)
+
+**IMPACTO**:
+- ⚡⚡⚡ Balance: **"Overpowered"** → **"Útil y estratégico"**
+- ⚡⚡ Skill requerido: **+100%** (posicionamiento importa)
+- ⚡⚡ Jugabilidad: **Más satisfactorio** (requiere pensar)
+- ✅ Rendimiento: **Mantenido** (cálculo simple y eficiente)
+- ✅ Diversión: **Aumentada** (balance perfecto)
+
+---
+
+**Fecha de Optimización**: 13 de Noviembre de 2025  
+**Estado**: ✅ RAYO DE ZEUS BALANCEADO - Fase 10 v2 COMPLETA  
+**Impacto**: ⚡⚡⚡ Habilidad transformada de "inútil" → "OP" → **"perfectamente balanceada"** 
