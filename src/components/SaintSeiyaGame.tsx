@@ -3,11 +3,28 @@ import type { Knight, GoldSaint, Upgrade } from '../data/gameData';
 import { BRONZE_KNIGHTS, GOLD_SAINTS, UPGRADES } from '../data/gameData';
 import { createPlayerSprite, createEnemySprite, createBossSprite, AnimatedSprite } from '../systems/SpriteSystem';
 import { CombatSystem } from '../core/Combat';
+import { PowerSystem } from '../systems/PowerSystem';
+import {
+  PLAYER_CONFIG,
+  ENEMY_CONFIG,
+  BOSS_CONFIG,
+  DROPS_CONFIG,
+  MAP_CONFIG,
+  PROJECTILE_CONFIG,
+  WAVE_CONFIG,
+  VISUAL_CONFIG,
+  PERFORMANCE_CONFIG,
+  AUDIO_CONFIG,
+  calculateEnemyHP,
+  calculateEnemySpeed,
+  calculateCosmosRequired,
+  calculateFireRate
+} from '../config/gameConfig';
 
-const WIDTH = 800; // Tamaño del viewport (lo que se ve en pantalla)
-const HEIGHT = 600;
-const MAP_WIDTH = 1600; // Mapa más grande para un templo espacioso
-const MAP_HEIGHT = 1200;
+const WIDTH = MAP_CONFIG.VIEWPORT_WIDTH;
+const HEIGHT = MAP_CONFIG.VIEWPORT_HEIGHT;
+const MAP_WIDTH = MAP_CONFIG.MAP_WIDTH;
+const MAP_HEIGHT = MAP_CONFIG.MAP_HEIGHT;
 
 interface Player {
   x: number;
@@ -83,6 +100,7 @@ interface PlayerUpgrades {
   multiShot: number;
   maxHealth: number;
   explosion: number;
+  lightning: number;
 }
 
 interface BossAttackEffect {
@@ -142,7 +160,8 @@ const SaintSeiyaGame: React.FC = () => {
     fireRate: 0,
     multiShot: 0,
     maxHealth: 0,
-    explosion: 0
+    explosion: 0,
+    lightning: 0
   });
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
   const [playerSprite, setPlayerSprite] = useState<AnimatedSprite | null>(null);
@@ -169,6 +188,7 @@ const SaintSeiyaGame: React.FC = () => {
   const dropsRef = useRef<Drop[]>([]);
   const spawnWarningsRef = useRef<SpawnWarning[]>([]);
   const lastCleanupTime = useRef<number>(0);
+  const lastLightningTrigger = useRef<number>(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -216,10 +236,10 @@ const SaintSeiyaGame: React.FC = () => {
       x: initialX,
       y: initialY,
       knight,
-      health: 100,
-      maxHealth: 100,
+      health: PLAYER_CONFIG.STARTING_HEALTH,
+      maxHealth: PLAYER_CONFIG.STARTING_MAX_HEALTH,
       cosmos: 0,
-      level: 1
+      level: PLAYER_CONFIG.STARTING_LEVEL
     });
     
     // Inicializar cámara centrada en el jugador
@@ -239,8 +259,8 @@ const SaintSeiyaGame: React.FC = () => {
     if (!backgroundMusic.current) {
       const audio = new Audio('/music.mp3');
       audio.loop = true;
-      audio.volume = 0.3;
-      audio.play().catch(err => console.log('Audio playback failed:', err));
+      audio.volume = AUDIO_CONFIG.BACKGROUND_MUSIC_VOLUME;
+      audio.play().catch(() => {});
       backgroundMusic.current = audio;
     }
     
@@ -248,43 +268,33 @@ const SaintSeiyaGame: React.FC = () => {
     try {
       const sprite = await createPlayerSprite();
       setPlayerSprite(sprite);
-      console.log('Player sprite loaded');
       
-      // Precargar pool de sprites de enemigos (30 sprites reutilizables)
-      console.log('Preloading enemy sprite pool...');
+      // Precargar pool de sprites de enemigos
       const enemyPool: AnimatedSprite[] = [];
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < PERFORMANCE_CONFIG.ENEMY_SPRITE_POOL_SIZE; i++) {
         const enemySprite = await createEnemySprite();
         enemyPool.push(enemySprite);
       }
       enemySpritePool.current = enemyPool;
-      console.log('Enemy sprite pool loaded:', enemyPool.length);
       
       // Cargar sprite del boss
       const bSprite = await createBossSprite();
       setBossSprite(bSprite);
-      console.log('Boss sprite loaded');
       
       // Cargar sprite de proyectil
       const projImg = new Image();
       projImg.onload = () => {
         setProjectileImage(projImg);
-        console.log('Projectile sprite loaded');
       };
-      projImg.onerror = () => {
-        console.error('Failed to load projectile sprite');
-      };
+      projImg.onerror = () => {};
       projImg.src = '/sprites/attacks/attack_1.png';
       
       // Cargar sprite de ataque del boss
       const bossAttackImg = new Image();
       bossAttackImg.onload = () => {
         setBossAttackImage(bossAttackImg);
-        console.log('Boss attack sprite loaded');
       };
-      bossAttackImg.onerror = () => {
-        console.error('Failed to load boss attack sprite');
-      };
+      bossAttackImg.onerror = () => {};
       bossAttackImg.src = '/sprites/attacks/boss_attack.png';
       
       // Cargar sprites de super ataque del boss (animación de 3 frames)
@@ -293,14 +303,11 @@ const SaintSeiyaGame: React.FC = () => {
         const img = new Image();
         img.src = `/sprites/attacks/boss_super_attack${i}.png`;
         img.onload = () => {
-          console.log(`Boss super attack sprite ${i} loaded`);
           if (i === 3) {
             setBossSuperAttackSprites([...superAttackSprites]);
           }
         };
-        img.onerror = () => {
-          console.error(`Failed to load boss super attack sprite ${i}`);
-        };
+        img.onerror = () => {};
         superAttackSprites.push(img);
       }
       
@@ -308,14 +315,11 @@ const SaintSeiyaGame: React.FC = () => {
       const floorImg = new Image();
       floorImg.onload = () => {
         setFloorImage(floorImg);
-        console.log('Floor image loaded');
       };
-      floorImg.onerror = () => {
-        console.error('Failed to load floor image');
-      };
+      floorImg.onerror = () => {};
       floorImg.src = '/sprites/stages/floor_1_stage.png';
     } catch (error) {
-      console.error('Failed to load sprites:', error);
+      // Error silencioso al cargar sprites
     }
   };
 
@@ -333,8 +337,8 @@ const SaintSeiyaGame: React.FC = () => {
       id: nextEnemyId.current++,
       x: MAP_WIDTH / 2,
       y: MAP_HEIGHT / 2,
-      health: 500 + currentHouse * 200,
-      maxHealth: 500 + currentHouse * 200,
+      health: BOSS_CONFIG.BASE_HP + currentHouse * BOSS_CONFIG.HP_INCREMENT_PER_HOUSE,
+      maxHealth: BOSS_CONFIG.BASE_HP + currentHouse * BOSS_CONFIG.HP_INCREMENT_PER_HOUSE,
       gold,
       lastAttack: 0,
       lastSuperAttack: 0,
@@ -354,50 +358,28 @@ const SaintSeiyaGame: React.FC = () => {
       x, y, 
       type,
       value,
-      lifetime: type === 'health' ? 8 : 15 // Health dura 8s, cosmos 15s
+      lifetime: type === 'health' ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
     }]);
   }, []);
 
   const shoot = useCallback(() => {
-    // Log SIEMPRE al inicio (con throttle para no saturar)
-    if (Math.random() < 0.02) { // 2% de las veces
-      console.log('[SHOOT] 🔫 Función shoot() ejecutada');
-    }
-    
     const currentPlayer = playerRef.current;
-    if (!currentPlayer) {
-      if (Math.random() < 0.02) console.log('[SHOOT] ❌ No hay currentPlayer');
-      return;
-    }
-    if (gameState !== 'playing') {
-      if (Math.random() < 0.02) console.log('[SHOOT] ❌ GameState no es playing:', gameState);
-      return;
-    }
+    if (!currentPlayer) return;
+    if (gameState !== 'playing') return;
     
     const now = Date.now();
-    const fireRate = currentPlayer.knight.fireRate - upgrades.fireRate * 50;
-    const cooldownTime = Math.max(200, fireRate);
+    const cooldownTime = calculateFireRate(upgrades.fireRate);
     const timeSinceLastShot = now - lastShot;
+    if (timeSinceLastShot < cooldownTime) return;
     
-    if (timeSinceLastShot < cooldownTime) {
-      // No loguear esto cada frame, solo ocasionalmente
-      return;
-    }
-    
-    console.log('[SHOOT] ✅ Cooldown pasado, intentando disparar...');
     setLastShot(now);
-    
-    // Configuración del rango de ataque (más amplio tipo Vampire Survivors)
-    const attackRange = 450; // Rango máximo de ataque en píxeles
     
     // Encontrar el enemigo más cercano usando el CombatSystem
     const nearestEnemy = CombatSystem.findNearestEnemy(
       { x: currentPlayer.x, y: currentPlayer.y },
       enemiesRef.current,
-      attackRange
+      PLAYER_CONFIG.ATTACK_RANGE
     );
-    
-    console.log(`[SHOOT] Enemigos en array: ${enemiesRef.current.length}, Enemigo más cercano: ${nearestEnemy ? 'SÍ' : 'NO'}`);
     
     // Determinar el objetivo (enemigo cercano o boss si está cerca)
     let target: { x: number; y: number; id: number } | null = nearestEnemy;
@@ -410,22 +392,12 @@ const SaintSeiyaGame: React.FC = () => {
         { x: currentBoss.x, y: currentBoss.y }
       );
       
-      console.log(`[SHOOT] Boss encontrado, distancia: ${bossDist.toFixed(1)}px (rango: ${attackRange}px)`);
-      
-      if (bossDist <= attackRange) {
-        // Si el boss está en rango, priorizarlo
+      if (bossDist <= PLAYER_CONFIG.ATTACK_RANGE) {
         target = currentBoss;
-        console.log('[SHOOT] ✅ Boss seleccionado como objetivo');
       }
     }
     
-    // Si no hay objetivo en rango, NO disparar
-    if (!target) {
-      console.log('[SHOOT] ❌ NO HAY OBJETIVO EN RANGO - No se dispara');
-      return; // No hay enemigos en rango
-    }
-    
-    console.log('[SHOOT] 🎯 OBJETIVO ENCONTRADO - Creando proyectiles...');
+    if (!target) return;
     
     // Crear efecto visual de ataque
     CombatSystem.createAttackEffect({ x: currentPlayer.x, y: currentPlayer.y }, target);
@@ -454,14 +426,13 @@ const SaintSeiyaGame: React.FC = () => {
         id: projId,
         x: startX,
         y: startY,
-        dx: Math.cos(angle) * 2.0, // Velocidad reducida para mejor visualización
-        dy: Math.sin(angle) * 2.0, // Velocidad reducida para mejor visualización
-        damage: currentPlayer.knight.damage + upgrades.damage,
+        dx: Math.cos(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
+        dy: Math.sin(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
+        damage: PLAYER_CONFIG.BASE_DAMAGE + upgrades.damage * PLAYER_CONFIG.DAMAGE_UPGRADE_BONUS,
         color: currentPlayer.knight.projectileColor,
         isEnemy: false,
         angle: angle
       });
-      console.log(`[SHOOT] Proyectil ${projId} creado en (${startX.toFixed(1)}, ${startY.toFixed(1)}) hacia ángulo ${(angle * 180 / Math.PI).toFixed(1)}° con daño ${currentPlayer.knight.damage + upgrades.damage}`);
     }
     
     setProjectiles(prev => [...prev, ...newProjectiles]);
@@ -476,13 +447,12 @@ const SaintSeiyaGame: React.FC = () => {
       let newCosmos = prev.cosmos + amount;
       let newLevel = prev.level;
       
-      // Fórmula de cosmos requerido: comienza en 10, incrementa de 5 en 5
-      let cosmosRequired = 10 + ((newLevel - 1) * 5);
+      let cosmosRequired = calculateCosmosRequired(newLevel);
       
       while (newCosmos >= cosmosRequired) {
         newCosmos -= cosmosRequired;
         newLevel++;
-        cosmosRequired = 10 + ((newLevel - 1) * 5);
+        cosmosRequired = calculateCosmosRequired(newLevel);
         
         const choices: Upgrade[] = [];
         while (choices.length < 3) {
@@ -514,11 +484,10 @@ const SaintSeiyaGame: React.FC = () => {
     if (upgradeId === 'maxHealth') {
       setPlayer(p => {
         if (!p) return p;
-        const healthBonus = 75; // +75 HP por nivel
         return { 
           ...p, 
-          maxHealth: p.maxHealth + healthBonus,
-          health: p.health + healthBonus // También aumentar la vida actual
+          maxHealth: p.maxHealth + PLAYER_CONFIG.MAX_HEALTH_UPGRADE_BONUS,
+          health: p.health + PLAYER_CONFIG.MAX_HEALTH_UPGRADE_BONUS
         };
       });
     }
@@ -571,16 +540,21 @@ const SaintSeiyaGame: React.FC = () => {
     }
     
     // Sistema progresivo con spawn interval balanceado estilo Vampire Survivors
-    const baseInterval = 2500; // 2.5 segundos base (más rápido)
-    const reduction = (waveNumber - 1) * 80; // Reducir 80ms por oleada
-    const spawnInterval = Math.max(1000, baseInterval - reduction); // Mínimo 1 segundo
+    const reduction = (waveNumber - 1) * ENEMY_CONFIG.SPAWN_INTERVAL_REDUCTION_PER_WAVE;
+    const spawnInterval = Math.max(
+      ENEMY_CONFIG.MIN_SPAWN_INTERVAL,
+      ENEMY_CONFIG.BASE_SPAWN_INTERVAL - reduction
+    );
     
     const interval = setInterval(() => {
       const currentPlayer = playerRef.current;
       if (!currentPlayer) return;
       
       // Límite de enemigos activos progresivo
-      const maxActiveEnemies = Math.min(8 + Math.floor(waveNumber * 1.5), 25); // Empezar con 8, máximo 25
+      const maxActiveEnemies = Math.min(
+        ENEMY_CONFIG.BASE_MAX_ACTIVE_ENEMIES + Math.floor(waveNumber * ENEMY_CONFIG.MAX_ACTIVE_ENEMIES_INCREMENT),
+        ENEMY_CONFIG.MAX_ACTIVE_ENEMIES_CAP
+      );
       
       setEnemies(currentEnemies => {
         if (currentEnemies.length >= maxActiveEnemies) {
@@ -588,13 +562,13 @@ const SaintSeiyaGame: React.FC = () => {
         }
         // Limpieza periódica: remover enemigos muy lejanos
         const now = Date.now();
-        if (now - lastCleanupTime.current > 5000) { // Cada 5 segundos
+        if (now - lastCleanupTime.current > PERFORMANCE_CONFIG.CLEANUP_INTERVAL) {
           lastCleanupTime.current = now;
           const currentPlayer = playerRef.current;
           if (currentPlayer) {
             return currentEnemies.filter(e => {
               const dist = Math.hypot(currentPlayer.x - e.x, currentPlayer.y - e.y);
-              return dist <= 1200; // Mantener solo enemigos dentro de 1200px
+              return dist <= ENEMY_CONFIG.CLEANUP_DISTANCE;
             });
           }
         }
@@ -603,21 +577,36 @@ const SaintSeiyaGame: React.FC = () => {
       
       // Sistema de oleadas progresivo con más enemigos
       let availableTypes: Array<'normal' | 'fast' | 'tank'> = ['normal'];
-      if (waveNumber >= 2) availableTypes.push('fast');
-      if (waveNumber >= 3) availableTypes.push('tank');
+      if (waveNumber >= ENEMY_CONFIG.FAST.UNLOCK_WAVE) availableTypes.push('fast');
+      if (waveNumber >= ENEMY_CONFIG.TANK.UNLOCK_WAVE) availableTypes.push('tank');
       
       // A partir de oleada 5, mezclar tipos
       let type: 'normal' | 'fast' | 'tank';
-      if (waveNumber >= 5 && Math.random() < 0.3) {
-        // 30% de probabilidad de enemigo especial en oleadas altas
+      if (waveNumber >= 5 && Math.random() < WAVE_CONFIG.SPECIAL_ENEMY_CHANCE_AFTER_WAVE_5) {
         type = availableTypes[1 + Math.floor(Math.random() * (availableTypes.length - 1))]!;
       } else {
         type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
       }
       
-      // Spawn en un ANILLO alrededor del jugador (350-500 píxeles de distancia)
-      const spawnDistance = 350 + Math.random() * 150;
-      const angle = Math.random() * Math.PI * 2;
+      // SISTEMA DE SPAWN MULTI-DIRECCIONAL: Enemigos vienen de 8 direcciones diferentes
+      // para evitar que todos sigan la misma ruta y crear patrones de ataque variados
+      const spawnDirections = [
+        { name: 'arriba', angle: -Math.PI / 2 },
+        { name: 'abajo', angle: Math.PI / 2 },
+        { name: 'izquierda', angle: Math.PI },
+        { name: 'derecha', angle: 0 },
+        { name: 'arriba-izquierda', angle: -3 * Math.PI / 4 },
+        { name: 'arriba-derecha', angle: -Math.PI / 4 },
+        { name: 'abajo-izquierda', angle: 3 * Math.PI / 4 },
+        { name: 'abajo-derecha', angle: Math.PI / 4 }
+      ];
+      
+      // Seleccionar dirección aleatoria con variación
+      const direction = spawnDirections[Math.floor(Math.random() * spawnDirections.length)]!;
+      const angleVariation = (Math.random() - 0.5) * 0.4; // ±20° de variación
+      const angle = direction.angle + angleVariation;
+      
+      const spawnDistance = ENEMY_CONFIG.SPAWN_DISTANCE_MIN + Math.random() * (ENEMY_CONFIG.SPAWN_DISTANCE_MAX - ENEMY_CONFIG.SPAWN_DISTANCE_MIN);
       
       let x = currentPlayer.x + Math.cos(angle) * spawnDistance;
       let y = currentPlayer.y + Math.sin(angle) * spawnDistance;
@@ -626,18 +615,20 @@ const SaintSeiyaGame: React.FC = () => {
       x = Math.max(50, Math.min(MAP_WIDTH - 50, x));
       y = Math.max(50, Math.min(MAP_HEIGHT - 50, y));
       
-      // Crear advertencia de spawn (0.8 segundos)
+      // Crear advertencia de spawn
       const warning: SpawnWarning = {
         id: nextWarningId.current++,
         x, y,
         type,
-        spawnTime: Date.now() + 800,
-        warningDuration: 800
+        spawnTime: Date.now() + ENEMY_CONFIG.WARNING_DURATION,
+        warningDuration: ENEMY_CONFIG.WARNING_DURATION
       };
       
       setSpawnWarnings(prev => {
-        // Límite muy conservador para evitar lag
-        const maxWarnings = Math.min(2 + Math.floor(waveNumber / 2), 10);
+        const maxWarnings = Math.min(
+          2 + Math.floor(waveNumber / 2),
+          ENEMY_CONFIG.MAX_WARNINGS
+        );
         if (prev.length >= maxWarnings) {
           return prev;
         }
@@ -666,7 +657,7 @@ const SaintSeiyaGame: React.FC = () => {
       const currentBoss = bossRef.current;
       
       // Calcular deltaTime en segundos
-      const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Limitar a 100ms máximo
+      const deltaTime = Math.min((currentTime - lastTime) / 1000, PERFORMANCE_CONFIG.MAX_DELTA_TIME);
       lastTime = currentTime;
       
       // Actualizar timer del stage
@@ -674,15 +665,14 @@ const SaintSeiyaGame: React.FC = () => {
       setStageTime(currentStageTime);
       stageTimeRef.current = currentStageTime;
       
-      // Verificar si debe aparecer el jefe al minuto 2 (120 segundos)
-      if (currentStageTime >= 120 && !bossRef.current) {
+      // Verificar si debe aparecer el jefe
+      if (currentStageTime >= BOSS_CONFIG.SPAWN_TIME && !bossRef.current) {
         spawnBoss();
       }
       
-      // Velocidad base en píxeles por segundo (reducida para mejor control)
-      const baseSpeed = 180; // Velocidad base más balanceada
-      const speedMultiplier = currentPlayer.knight.speed + upgrades.speed * 0.5;
-      const pixelsPerSecond = baseSpeed * speedMultiplier;
+      // Velocidad base balanceada (progresa de forma satisfactoria)
+      const speedMultiplier = currentPlayer.knight.speed + upgrades.speed * PLAYER_CONFIG.SPEED_UPGRADE_MULTIPLIER;
+      const pixelsPerSecond = PLAYER_CONFIG.BASE_SPEED * speedMultiplier;
       
       // Leer input y construir vector de dirección
       let dx = 0, dy = 0;
@@ -698,8 +688,9 @@ const SaintSeiyaGame: React.FC = () => {
         const normalizedDy = (dy / magnitude) * pixelsPerSecond * deltaTime;
         
         // Calcular nueva posición con límites
-        const newX = Math.max(20, Math.min(MAP_WIDTH - 20, currentPlayer.x + normalizedDx));
-        const newY = Math.max(20, Math.min(MAP_HEIGHT - 20, currentPlayer.y + normalizedDy));
+        const margin = MAP_CONFIG.PLAYER_BOUNDARY_MARGIN;
+        const newX = Math.max(margin, Math.min(MAP_WIDTH - margin, currentPlayer.x + normalizedDx));
+        const newY = Math.max(margin, Math.min(MAP_HEIGHT - margin, currentPlayer.y + normalizedDy));
         
         // Actualizar posición del jugador
         setPlayer(prev => {
@@ -719,20 +710,16 @@ const SaintSeiyaGame: React.FC = () => {
       
       // ===== SISTEMA DE DISPARO AUTOMÁTICO (INLINE) =====
       const nowShoot = Date.now();
-      const fireRate = currentPlayer.knight.fireRate - upgrades.fireRate * 50;
-      const cooldownTime = Math.max(200, fireRate);
+      const cooldownTime = calculateFireRate(upgrades.fireRate);
       
       let projectilesToAdd: Projectile[] = [];
       
-      if (nowShoot - lastShot >= cooldownTime) {
-        // Cooldown pasado, intentar disparar
-        const attackRange = 450;
-        
+      if (nowShoot - lastShot >= cooldownTime && currentProjectiles.length < PLAYER_CONFIG.MAX_PROJECTILES) {
         // Encontrar el enemigo más cercano
         const nearestEnemy = CombatSystem.findNearestEnemy(
           { x: currentPlayer.x, y: currentPlayer.y },
           currentEnemies,
-          attackRange
+          PLAYER_CONFIG.ATTACK_RANGE
         );
         
         // Determinar el objetivo
@@ -745,7 +732,7 @@ const SaintSeiyaGame: React.FC = () => {
             { x: currentBoss.x, y: currentBoss.y }
           );
           
-          if (bossDist <= attackRange) {
+          if (bossDist <= PLAYER_CONFIG.ATTACK_RANGE) {
             target = currentBoss;
           }
         }
@@ -777,18 +764,94 @@ const SaintSeiyaGame: React.FC = () => {
               id: projId,
               x: startX,
               y: startY,
-              dx: Math.cos(angle) * 2.0,
-              dy: Math.sin(angle) * 2.0,
-              damage: currentPlayer.knight.damage + upgrades.damage,
+              dx: Math.cos(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
+              dy: Math.sin(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
+              damage: PLAYER_CONFIG.BASE_DAMAGE + upgrades.damage * PLAYER_CONFIG.DAMAGE_UPGRADE_BONUS,
               color: currentPlayer.knight.projectileColor,
               isEnemy: false,
               angle: angle
             });
-            console.log(`[SHOOT] Proyectil ${projId} creado hacia (${target.x.toFixed(1)}, ${target.y.toFixed(1)}) - Daño: ${currentPlayer.knight.damage + upgrades.damage}`);
           }
         }
       }
       // ===== FIN SISTEMA DE DISPARO =====
+      
+      // ===== SISTEMA DE RAYO DE ZEUS =====
+      const nowLightning = Date.now();
+      if (upgrades.lightning > 0) {
+        const lightningLevel = upgrades.lightning;
+        const lightningCooldown = PowerSystem.getLightningCooldown(lightningLevel);
+        
+        if (nowLightning - lastLightningTrigger.current >= lightningCooldown) {
+          lastLightningTrigger.current = nowLightning;
+          
+          // Calcular dirección del jugador basado en movimiento
+          let dirX = 0, dirY = 0;
+          if (keysPressed.has('w') || keysPressed.has('arrowup')) dirY -= 1;
+          if (keysPressed.has('s') || keysPressed.has('arrowdown')) dirY += 1;
+          if (keysPressed.has('a') || keysPressed.has('arrowleft')) dirX -= 1;
+          if (keysPressed.has('d') || keysPressed.has('arrowright')) dirX += 1;
+          
+          // Si no hay movimiento, usar dirección hacia el enemigo más cercano
+          if (dirX === 0 && dirY === 0) {
+            const nearestEnemy = CombatSystem.findNearestEnemy(
+              { x: currentPlayer.x, y: currentPlayer.y },
+              currentEnemies,
+              PLAYER_CONFIG.ATTACK_RANGE
+            );
+            if (nearestEnemy) {
+              dirX = nearestEnemy.x - currentPlayer.x;
+              dirY = nearestEnemy.y - currentPlayer.y;
+            } else {
+              dirX = 1; // Default derecha
+            }
+          }
+          
+          // Activar rayo
+          PowerSystem.triggerLightningStrike(
+            currentPlayer.x,
+            currentPlayer.y,
+            dirX,
+            dirY,
+            lightningLevel,
+            currentEnemies,
+            (enemyId, damage) => {
+              setEnemies(prev => prev.map(e => {
+                if (e.id === enemyId) {
+                  const newHealth = e.health - damage;
+                  if (newHealth <= 0) {
+                    // Crear drop
+                    const rand = Math.random();
+                    setDrops(prevDrops => [...prevDrops, {
+                      id: nextOrbId.current++,
+                      x: e.x,
+                      y: e.y,
+                      type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                      value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
+                      lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                    }]);
+                    setScore(s => s + 100);
+                    setWaveKills(k => {
+                      const newKills = k + 1;
+                      if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                        setWaveNumber(w => w + 1);
+                        return 0;
+                      }
+                      return newKills;
+                    });
+                    return null; // Eliminar enemigo
+                  }
+                  return { ...e, health: newHealth };
+                }
+                return e;
+              }).filter(e => e !== null) as Enemy[]);
+            }
+          );
+        }
+      }
+      // Actualizar efectos del PowerSystem
+      PowerSystem.updateEffects();
+      // ===== FIN SISTEMA DE RAYO =====
       
       // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
       const now = Date.now();
@@ -801,36 +864,13 @@ const SaintSeiyaGame: React.FC = () => {
         prev.forEach(warning => {
           if (now >= warning.spawnTime) {
             // Crear el enemigo con estadísticas balanceadas y escalado por oleada
-            let health: number, maxHealth: number, speed: number, cosmosValue: number;
+            const health = calculateEnemyHP(warning.type, waveNumber);
+            const maxHealth = health;
+            const speed = calculateEnemySpeed(warning.type, waveNumber);
             
-            // Escalado progresivo de dificultad optimizado para Vampire Survivors
-            // Oleada 1: Enemigos débiles (mueren de 1 golpe con daño 18)
-            // Oleada 5+: Enemigos más resistentes
-            const baseHpMultiplier = 1 + (waveNumber - 1) * 0.12; // +12% HP por oleada
-            const speedMultiplier = 1 + (waveNumber - 1) * 0.05; // +5% velocidad por oleada
-            
-            switch (warning.type) {
-              case 'tank':
-                // Oleada 1: ~30 HP (2 golpes con daño 18)
-                health = Math.floor((30 + (waveNumber * 5)) * baseHpMultiplier);
-                maxHealth = health;
-                speed = 0.45 * speedMultiplier; // Lento pero escala
-                cosmosValue = 5 + Math.floor(Math.random() * 4); // 5-8 cosmos
-                break;
-              case 'fast':
-                // Oleada 1: ~10 HP (1 golpe con daño 18)
-                health = Math.floor((10 + (waveNumber * 2)) * baseHpMultiplier);
-                maxHealth = health;
-                speed = 1.6 * speedMultiplier; // Muy rápido
-                cosmosValue = 3 + Math.floor(Math.random() * 3); // 3-5 cosmos
-                break;
-              default: // 'normal'
-                // Oleada 1: ~15 HP (1 golpe con daño 18)
-                health = Math.floor((15 + (waveNumber * 3)) * baseHpMultiplier);
-                maxHealth = health;
-                speed = 0.85 * speedMultiplier; // Velocidad media
-                cosmosValue = 2 + Math.floor(Math.random() * 3); // 2-4 cosmos
-            }
+            // Calcular cosmos según tipo
+            const enemyTypeConfig = ENEMY_CONFIG[warning.type.toUpperCase() as 'NORMAL' | 'FAST' | 'TANK'];
+            const cosmosValue = enemyTypeConfig.COSMOS_MIN + Math.floor(Math.random() * (enemyTypeConfig.COSMOS_MAX - enemyTypeConfig.COSMOS_MIN + 1));
             
             // Obtener sprite del pool (reutilizar sprites precargados)
             let sprite: AnimatedSprite | undefined;
@@ -867,15 +907,14 @@ const SaintSeiyaGame: React.FC = () => {
       
       // Combinar proyectiles existentes con los nuevos del disparo
       const allProjectiles = [...currentProjectiles, ...projectilesToAdd];
-      console.log(`[FRAME] Total proyectiles a procesar: ${allProjectiles.length} (${currentProjectiles.length} existentes + ${projectilesToAdd.length} nuevos)`);
       
       // PASO 1: Mover proyectiles
       const movedProjectiles: Projectile[] = [];
-      const cameraMargin = 200;
+      const cameraMargin = PROJECTILE_CONFIG.CAMERA_MARGIN;
       
       for (const p of allProjectiles) {
-        const newX = p.x + p.dx * 2.5;
-        const newY = p.y + p.dy * 2.5;
+        const newX = p.x + p.dx * PLAYER_CONFIG.PROJECTILE_SPEED_MULTIPLIER;
+        const newY = p.y + p.dy * PLAYER_CONFIG.PROJECTILE_SPEED_MULTIPLIER;
         
         // Verificar si está en rango de la cámara
         const inCameraRange = 
@@ -889,8 +928,6 @@ const SaintSeiyaGame: React.FC = () => {
         }
       }
       
-      console.log(`[MOVED] Proyectiles movidos y en cámara: ${movedProjectiles.length}`);
-      
       // PASO 2: Mover enemigos y verificar colisión con jugador
       const movedEnemies: Enemy[] = [];
       let playerDamaged = false;
@@ -903,7 +940,7 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Verificar colisión con jugador (contacto físico)
-        if (Math.hypot(currentPlayer.x - enemy.x, currentPlayer.y - enemy.y) < 30) {
+        if (Math.hypot(currentPlayer.x - enemy.x, currentPlayer.y - enemy.y) < ENEMY_CONFIG.COLLISION_RADIUS) {
           if (!playerDamaged) {
             playerDamaged = true;
             screenShakeNeeded = true;
@@ -913,8 +950,7 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Mover enemigo hacia el jugador
         const angle = Math.atan2(currentPlayer.y - enemy.y, currentPlayer.x - enemy.x);
-        const baseEnemySpeed = 120;
-        const actualSpeed = baseEnemySpeed * enemy.speed * deltaTime;
+        const actualSpeed = ENEMY_CONFIG.BASE_MOVEMENT_SPEED * enemy.speed * deltaTime;
         
         const newX = enemy.x + Math.cos(angle) * actualSpeed;
         const newY = enemy.y + Math.sin(angle) * actualSpeed;
@@ -936,13 +972,16 @@ const SaintSeiyaGame: React.FC = () => {
       if (playerDamaged) {
         setPlayer(p => {
           if (!p) return p;
-          const newHealth = p.health - 5;
+          const newHealth = p.health - ENEMY_CONFIG.DAMAGE_TO_PLAYER;
           if (newHealth <= 0) setGameState('gameover');
           return { ...p, health: Math.max(0, newHealth) };
         });
         if (screenShakeNeeded) {
-          setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
-          setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
+          setScreenShake({ 
+            x: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY, 
+            y: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY 
+          });
+          setTimeout(() => setScreenShake({ x: 0, y: 0 }), VISUAL_CONFIG.SCREEN_SHAKE_DURATION);
         }
       }
       
@@ -955,24 +994,30 @@ const SaintSeiyaGame: React.FC = () => {
       
       const enemiesAlive = new Set(movedEnemies.map(e => e.id));
       
-      console.log(`[COLLISION] Proyectiles: ${movedProjectiles.length}, Enemigos: ${movedEnemies.length}`);
-      
+      // ⚡ Early exit: No procesar colisiones si no hay enemigos ni boss
+      if (movedEnemies.length === 0 && !currentBoss) {
+        projectilesToKeep.push(...movedProjectiles);
+        enemiesToKeep.push(...movedEnemies);
+      } else {
       for (const proj of movedProjectiles) {
         let projectileHit = false;
         
         if (proj.isEnemy) {
           // Proyectil enemigo vs jugador
           const distToPlayer = Math.hypot(currentPlayer.x - proj.x, currentPlayer.y - proj.y);
-          if (distToPlayer < 25) {
+          if (distToPlayer < PROJECTILE_CONFIG.ENEMY_PROJECTILE_HIT_RADIUS) {
             projectileHit = true;
             setPlayer(p => {
               if (!p) return p;
-              const newHealth = p.health - 10;
+              const newHealth = p.health - PROJECTILE_CONFIG.ENEMY_PROJECTILE_DAMAGE;
               if (newHealth <= 0) setGameState('gameover');
               return { ...p, health: Math.max(0, newHealth) };
             });
-            setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
-            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
+            setScreenShake({ 
+              x: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY, 
+              y: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY 
+            });
+            setTimeout(() => setScreenShake({ x: 0, y: 0 }), VISUAL_CONFIG.SCREEN_SHAKE_DURATION);
           }
         } else {
           // Proyectil del jugador vs enemigos
@@ -980,25 +1025,26 @@ const SaintSeiyaGame: React.FC = () => {
             if (!enemiesAlive.has(enemy.id)) continue;
             
             const dist = Math.hypot(enemy.x - proj.x, enemy.y - proj.y);
-            if (dist < 30) {
+            if (dist < PROJECTILE_CONFIG.PLAYER_PROJECTILE_HIT_RADIUS) {
               projectileHit = true;
-              enemy.health -= proj.damage;
+              const newHealth = enemy.health - proj.damage;
+              enemy.health = newHealth;
               
-              console.log(`[HIT] Proyectil ${proj.id} → Enemigo ${enemy.id} | HP: ${enemy.health + proj.damage} → ${enemy.health}`);
-              
-              if (enemy.health <= 0) {
-                console.log(`[KILL] Enemigo ${enemy.id} eliminado`);
+              if (newHealth <= 0) {
+                // Marcar enemigo como muerto
                 enemiesAlive.delete(enemy.id);
                 
+                // Crear drop solo cuando muere
                 const rand = Math.random();
-                newDrops.push({
+                const newDrop: Drop = {
                   id: nextOrbId.current++,
                   x: enemy.x,
                   y: enemy.y,
-                  type: rand < 0.08 ? 'health' : 'cosmos',
-                  value: rand < 0.08 ? 20 : enemy.cosmosValue,
-                  lifetime: rand < 0.08 ? 8 : 15
-                });
+                  type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                  value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : enemy.cosmosValue,
+                  lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                };
+                newDrops.push(newDrop);
                 
                 addScore += 100;
                 addKills += 1;
@@ -1010,30 +1056,39 @@ const SaintSeiyaGame: React.FC = () => {
           // Proyectil del jugador vs boss
           if (!projectileHit && currentBoss) {
             const distBoss = Math.hypot(currentBoss.x - proj.x, currentBoss.y - proj.y);
-            if (distBoss < 50) {
+            if (distBoss < PROJECTILE_CONFIG.BOSS_PROJECTILE_HIT_RADIUS) {
               projectileHit = true;
               setBoss(b => {
                 if (!b) return b;
                 const newHealth = b.health - proj.damage;
-                console.log(`[BOSS HIT] HP: ${b.health} → ${newHealth}`);
                 
                 if (newHealth <= 0) {
-                  console.log(`[BOSS DEFEATED]`);
+                  // ⭐ DROP GENEROSO DE COSMOS AL DERROTAR AL BOSS
                   newDrops.push({
                     id: nextOrbId.current++,
                     x: b.x, y: b.y,
                     type: 'cosmos',
-                    value: 40 + Math.floor(Math.random() * 11),
-                    lifetime: 15
+                    value: BOSS_CONFIG.COSMOS_REWARD_MIN + Math.floor(Math.random() * (BOSS_CONFIG.COSMOS_REWARD_MAX - BOSS_CONFIG.COSMOS_REWARD_MIN + 1)),
+                    lifetime: DROPS_CONFIG.COSMOS_LIFETIME
                   });
-                  addScore += 1000;
+                  addScore += BOSS_CONFIG.SCORE_REWARD;
+                  
+                  // 🔄 SISTEMA POST-BOSS: Continuar con oleadas más difíciles
                   setCurrentHouse(h => h + 1);
-                  setWaveNumber(1);
+                  // Incrementar oleada significativamente para mayor dificultad
+                  setWaveNumber(w => w + WAVE_CONFIG.BOSS_DEFEATED_WAVE_INCREMENT);
                   setWaveKills(0);
                   setGameState('houseclear');
+                  
+                  // Reiniciar tiempo de stage para próximo boss en 3 minutos
+                  stageStartTime.current = Date.now();
+                  stageTimeRef.current = 0;
+                  
                   setTimeout(() => {
+                    setGameState('playing');
                     if (currentHouse + 1 < GOLD_SAINTS.length) {
-                      spawnBoss();
+                      // El siguiente boss spawneará automáticamente a los 3 minutos
+                      // Mientras tanto, continúan las oleadas progresivamente más difíciles
                     }
                   }, 3000);
                   return null;
@@ -1055,8 +1110,7 @@ const SaintSeiyaGame: React.FC = () => {
           enemiesToKeep.push(enemy);
         }
       }
-      
-      console.log(`[RESULT] Proyectiles finales: ${projectilesToKeep.length}, Enemigos: ${enemiesToKeep.length}, Kills: ${addKills}`);
+      } // ⚡ Fin del bloque de colisiones con enemigos
       
       // Actualizar estados AL FINAL DEL FRAME
       setProjectiles(projectilesToKeep);
@@ -1067,7 +1121,7 @@ const SaintSeiyaGame: React.FC = () => {
       if (newDrops.length > 0) {
         setDrops(prev => {
           const combined = [...prev, ...newDrops];
-          return combined.length > 30 ? combined.slice(-30) : combined;
+          return combined.length > DROPS_CONFIG.MAX_DROPS ? combined.slice(-DROPS_CONFIG.MAX_DROPS) : combined;
         });
       }
       
@@ -1075,7 +1129,7 @@ const SaintSeiyaGame: React.FC = () => {
       if (addKills > 0) {
         setWaveKills(k => {
           const newKills = k + addKills;
-          if (newKills >= 25) {
+          if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
             setWaveNumber(w => w + 1);
             return 0;
           }
@@ -1083,48 +1137,67 @@ const SaintSeiyaGame: React.FC = () => {
         });
       }
       
-      // Actualizar drops: simplemente actualizar lifetime
+      // ⚡ SISTEMA DE RECOLECCIÓN (tipo Vampire Survivors pero más balanceado)
+      // El jugador debe acercarse para recoger, con un pequeño rango de atracción
+      const PICKUP_RADIUS = DROPS_CONFIG.PICKUP_RADIUS;
+      const MAGNET_RADIUS = DROPS_CONFIG.MAGNET_RADIUS;
+      const MAGNET_SPEED = DROPS_CONFIG.MAGNET_SPEED;
+      
       setDrops(prev => {
-        const updatedDrops = prev
-          .map(drop => {
-            const newLifetime = drop.lifetime - deltaTime;
-            if (newLifetime <= 0) return null;
-            return { ...drop, lifetime: newLifetime };
-          })
-          .filter(drop => drop !== null) as Drop[];
+        const updatedDrops: Drop[] = [];
+        let collected = 0;
         
-        const maxDrops = 20;
-        if (updatedDrops.length > maxDrops) {
-          return updatedDrops.sort((a, b) => b.lifetime - a.lifetime).slice(0, maxDrops);
+        for (const drop of prev) {
+          // Actualizar lifetime
+          const newLifetime = drop.lifetime - deltaTime;
+          if (newLifetime <= 0) continue;
+          
+          // Calcular distancia al jugador (cacheado para optimización)
+          const distX = currentPlayer.x - drop.x;
+          const distY = currentPlayer.y - drop.y;
+          const distance = Math.hypot(distX, distY);
+          
+          // Recolección inmediata si está dentro del radio
+          if (distance < PICKUP_RADIUS) {
+            collected++;
+            if (drop.type === 'cosmos') {
+              gainCosmos(drop.value);
+            } else if (drop.type === 'health') {
+              setPlayer(p => {
+                if (!p) return p;
+                const newHealth = Math.min(p.maxHealth, p.health + drop.value);
+                return { ...p, health: newHealth };
+              });
+            }
+            continue;
+          }
+          
+          // Atracción magnética suave si está en rango
+          let newX = drop.x;
+          let newY = drop.y;
+          if (distance < MAGNET_RADIUS && distance > PICKUP_RADIUS) {
+            const moveAmount = MAGNET_SPEED * deltaTime;
+            const moveRatio = Math.min(moveAmount / distance, 1); // Normalizado
+            newX += distX * moveRatio;
+            newY += distY * moveRatio;
+          }
+          
+          updatedDrops.push({ ...drop, x: newX, y: newY, lifetime: newLifetime });
+        }
+        
+        // Limitar drops máximos
+        if (updatedDrops.length > DROPS_CONFIG.MAX_DROPS_DISPLAY) {
+          return updatedDrops.sort((a, b) => b.lifetime - a.lifetime).slice(0, DROPS_CONFIG.MAX_DROPS_DISPLAY);
         }
         return updatedDrops;
       });
-      
-      // Recolectar drops - radio más grande para compensar falta de atracción
-      setDrops(prev => prev.filter(drop => {
-        if (Math.hypot(currentPlayer.x - drop.x, currentPlayer.y - drop.y) < 40) {
-          // Procesar el drop según tipo
-          if (drop.type === 'cosmos') {
-            gainCosmos(drop.value);
-          } else if (drop.type === 'health') {
-            // Recuperar vida
-            setPlayer(p => {
-              if (!p) return p;
-              const newHealth = Math.min(p.maxHealth, p.health + drop.value);
-              return { ...p, health: newHealth };
-            });
-          }
-          return false; // Remover el drop
-        }
-        return true;
-      }));
       
       // Actualizar lógica del boss
       if (currentBoss) {
         const now = Date.now();
         
-        // Super ataque cada 10 segundos (10000ms)
-        if (now - currentBoss.lastSuperAttack > 10000) {
+        // Super ataque cada 10 segundos
+        if (now - currentBoss.lastSuperAttack > BOSS_CONFIG.SUPER_ATTACK_INTERVAL) {
           setBoss(b => {
             if (!b) return b;
             
@@ -1132,12 +1205,11 @@ const SaintSeiyaGame: React.FC = () => {
             const angle = Math.atan2(currentPlayer.y - b.y, currentPlayer.x - b.x);
             
             // Crear advertencia de área de ataque
-            // El ataque será un rectángulo largo (200x400) en la dirección del jugador
-            const warningWidth = 200;
-            const warningHeight = 400;
+            const warningWidth = BOSS_CONFIG.SUPER_ATTACK_WIDTH;
+            const warningHeight = BOSS_CONFIG.SUPER_ATTACK_HEIGHT;
             
             // Calcular posición del centro del área de ataque (frente al boss)
-            const attackDistance = warningHeight / 2 + 60; // Distancia desde el boss al centro del ataque
+            const attackDistance = warningHeight / 2 + 60;
             const attackX = b.x + Math.cos(angle) * attackDistance;
             const attackY = b.y + Math.sin(angle) * attackDistance;
             
@@ -1149,8 +1221,8 @@ const SaintSeiyaGame: React.FC = () => {
               height: warningHeight,
               angle: angle,
               createdAt: now,
-              warningDuration: 1500, // 1.5 segundos de advertencia
-              executionTime: now + 1500
+              warningDuration: BOSS_CONFIG.SUPER_ATTACK_WARNING_DURATION,
+              executionTime: now + BOSS_CONFIG.SUPER_ATTACK_WARNING_DURATION
             };
             
             setBossSuperAttackWarnings(prev => [...prev, warning]);
@@ -1160,7 +1232,7 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Ataque regular cada 2 segundos
-        if (now - currentBoss.lastAttack > 2000) {
+        if (now - currentBoss.lastAttack > BOSS_CONFIG.REGULAR_ATTACK_INTERVAL) {
           setBoss(b => {
             if (!b) return b;
             
@@ -1181,9 +1253,9 @@ const SaintSeiyaGame: React.FC = () => {
                   id: nextProjectileId.current++,
                   x: b.x,
                   y: b.y,
-                  dx: Math.cos(angle) * 3,
-                  dy: Math.sin(angle) * 3,
-                  damage: 15,
+                  dx: Math.cos(angle) * BOSS_CONFIG.PROJECTILE_SPEED_MEDIUM,
+                  dy: Math.sin(angle) * BOSS_CONFIG.PROJECTILE_SPEED_MEDIUM,
+                  damage: BOSS_CONFIG.REGULAR_PROJECTILE_DAMAGE_MEDIUM,
                   color: b.gold.color,
                   isEnemy: true,
                   angle: angle
@@ -1210,9 +1282,9 @@ const SaintSeiyaGame: React.FC = () => {
                   id: nextProjectileId.current++,
                   x: b.x,
                   y: b.y,
-                  dx: Math.cos(angle + i * 0.2) * 4,
-                  dy: Math.sin(angle + i * 0.2) * 4,
-                  damage: 20,
+                  dx: Math.cos(angle + i * 0.2) * BOSS_CONFIG.PROJECTILE_SPEED_FAST,
+                  dy: Math.sin(angle + i * 0.2) * BOSS_CONFIG.PROJECTILE_SPEED_FAST,
+                  damage: BOSS_CONFIG.REGULAR_PROJECTILE_DAMAGE_HIGH,
                   color: b.gold.color,
                   isEnemy: true,
                   angle: angle + i * 0.2
@@ -1239,9 +1311,9 @@ const SaintSeiyaGame: React.FC = () => {
                   id: nextProjectileId.current++,
                   x: b.x,
                   y: b.y,
-                  dx: Math.cos(angle) * 2,
-                  dy: Math.sin(angle) * 2,
-                  damage: 10,
+                  dx: Math.cos(angle) * BOSS_CONFIG.PROJECTILE_SPEED_SLOW,
+                  dy: Math.sin(angle) * BOSS_CONFIG.PROJECTILE_SPEED_SLOW,
+                  damage: BOSS_CONFIG.REGULAR_PROJECTILE_DAMAGE_LOW,
                   color: b.gold.color,
                   isEnemy: true,
                   angle: angle
@@ -1275,7 +1347,7 @@ const SaintSeiyaGame: React.FC = () => {
                 }
                 return { ...current, isAttacking: false };
               });
-            }, 300);
+            }, BOSS_CONFIG.REGULAR_ATTACK_ANIMATION_DURATION);
             
             return updatedBoss;
           });
@@ -1291,9 +1363,9 @@ const SaintSeiyaGame: React.FC = () => {
       setBossAttackEffects(prev => {
         const now = Date.now();
         const filtered = prev.filter(effect => now - effect.createdAt < effect.duration);
-        // Límite más agresivo: solo 15 efectos
-        if (filtered.length > 15) {
-          return filtered.slice(-15);
+        // Límite más agresivo
+        if (filtered.length > VISUAL_CONFIG.MAX_ATTACK_EFFECTS) {
+          return filtered.slice(-VISUAL_CONFIG.MAX_ATTACK_EFFECTS);
         }
         return filtered;
       });
@@ -1313,16 +1385,19 @@ const SaintSeiyaGame: React.FC = () => {
               width: warning.width,
               height: warning.height,
               angle: warning.angle,
-              damage: 30, // Daño del super ataque
+              damage: BOSS_CONFIG.SUPER_ATTACK_DAMAGE,
               createdAt: now,
-              duration: 500 // Duración del ataque visible (0.5s)
+              duration: BOSS_CONFIG.SUPER_ATTACK_EXECUTION_DURATION
             };
             
             setBossSuperAttacks(attacks => [...attacks, superAttack]);
             
             // Screen shake al ejecutar super ataque
-            setScreenShake({ x: (Math.random() - 0.5) * 15, y: (Math.random() - 0.5) * 15 });
-            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 200);
+            setScreenShake({ 
+              x: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_SUPER_ATTACK_INTENSITY, 
+              y: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_SUPER_ATTACK_INTENSITY 
+            });
+            setTimeout(() => setScreenShake({ x: 0, y: 0 }), VISUAL_CONFIG.SCREEN_SHAKE_SUPER_ATTACK_DURATION);
           } else {
             remaining.push(warning);
           }
@@ -1367,38 +1442,14 @@ const SaintSeiyaGame: React.FC = () => {
         });
       });
       
-      // Continuar el loop
-      animationFrameId = requestAnimationFrame(gameLoop);
-    };
-    
-    // Iniciar el loop
-    animationFrameId = requestAnimationFrame(gameLoop);
-    
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropItem, gainCosmos, waveNumber]);
-
-  useEffect(() => {
-    if (!canvasRef.current || !player || !gameStarted) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    let animationFrameId: number;
-    
-    const render = () => {
-      // Calcular deltaTime para animaciones
-      const now = Date.now();
-      const deltaTime = (now - lastFrameTime.current) / 1000;
-      lastFrameTime.current = now;
-      
-      // Actualizar sprite del jugador cada frame (no throttled)
-      if (playerSprite) {
-        playerSprite.update(deltaTime);
+      // ===== RENDERIZADO INMEDIATO EN EL MISMO LOOP =====
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Actualizar sprite del jugador cada frame
+          if (playerSprite) {
+            playerSprite.update(deltaTime);
         
         // Determinar animación
         if (isAttacking) {
@@ -1514,11 +1565,30 @@ const SaintSeiyaGame: React.FC = () => {
             ctx.fill();
           }
           
-          // Barra de vida del enemigo
-          ctx.fillStyle = '#0F0';
-          ctx.fillRect(enemy.x - 15, enemy.y - 30, 30, 3);
+          // Barra de vida del enemigo (mejorada)
+          const barWidth = 40;
+          const barHeight = 5;
+          const barX = enemy.x - barWidth / 2;
+          const barY = enemy.y - 35;
+          
+          // Borde negro
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(barX, barY, barWidth, barHeight);
+          
+          // Fondo rojo (vida perdida)
           ctx.fillStyle = '#F00';
-          ctx.fillRect(enemy.x - 15, enemy.y - 30, 30 * (enemy.health / enemy.maxHealth), 3);
+          ctx.fillRect(barX, barY, barWidth, barHeight);
+          
+          // Vida actual (gradiente de rojo a verde según salud)
+          const healthPercent = enemy.health / enemy.maxHealth;
+          if (healthPercent > 0) {
+            // Color gradiente: rojo cuando baja, verde cuando alta
+            const red = Math.floor(255 * (1 - healthPercent));
+            const green = Math.floor(255 * healthPercent);
+            ctx.fillStyle = `rgb(${red}, ${green}, 0)`;
+            ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+          }
         });
         
         if (boss) {
@@ -1543,21 +1613,50 @@ const SaintSeiyaGame: React.FC = () => {
           ctx.strokeText(boss.gold.name, boss.x, boss.y - 55);
           ctx.fillText(boss.gold.name, boss.x, boss.y - 55);
           
-          // Barra de vida del boss
-          ctx.fillStyle = '#0F0';
-          ctx.fillRect(boss.x - 40, boss.y - 60, 80, 5);
+          // Barra de vida del boss (mejorada)
+          const bossBarWidth = 80;
+          const bossBarHeight = 6;
+          const bossBarX = boss.x - bossBarWidth / 2;
+          const bossBarY = boss.y - 65;
+          
+          // Borde negro
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(bossBarX, bossBarY, bossBarWidth, bossBarHeight);
+          
+          // Fondo rojo (vida perdida)
           ctx.fillStyle = '#F00';
-          ctx.fillRect(boss.x - 40, boss.y - 60, 80 * (boss.health / boss.maxHealth), 5);
+          ctx.fillRect(bossBarX, bossBarY, bossBarWidth, bossBarHeight);
+          
+          // Vida actual del boss (gradiente de rojo a verde)
+          const bossHealthPercent = boss.health / boss.maxHealth;
+          if (bossHealthPercent > 0) {
+            const red = Math.floor(255 * (1 - bossHealthPercent));
+            const green = Math.floor(255 * bossHealthPercent);
+            ctx.fillStyle = `rgb(${red}, ${green}, 0)`;
+            ctx.fillRect(bossBarX, bossBarY, bossBarWidth * bossHealthPercent, bossBarHeight);
+          }
         }
         
         projectiles.forEach(proj => {
-          // Si hay sprite de proyectil y es del jugador, usarlo (sin rotación para mejor performance)
-          if (projectileImage && projectileImage.complete && !proj.isEnemy) {
+          // ⚡ Trail visual eficiente para proyectiles del jugador (tipo Vampire Survivors)
+          if (!proj.isEnemy && projectileImage && projectileImage.complete) {
             ctx.imageSmoothingEnabled = false;
-            
             const displaySize = 24;
             
-            // Dibujar sin rotación para mejor rendimiento
+            // Trail de 2 círculos (optimizado, no impacta rendimiento)
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = proj.color;
+            for (let i = 1; i <= 2; i++) {
+              const trailX = proj.x - proj.dx * i * 3;
+              const trailY = proj.y - proj.dy * i * 3;
+              ctx.beginPath();
+              ctx.arc(trailX, trailY, (3 - i) * 2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            
+            // Proyectil principal
             ctx.drawImage(
               projectileImage,
               proj.x - displaySize/2, proj.y - displaySize/2,
@@ -1574,6 +1673,10 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Dibujar efectos de ataque
         CombatSystem.drawAttackEffects(ctx);
+        
+        // Dibujar efectos de Rayo de Zeus
+        PowerSystem.drawLightning(ctx);
+        PowerSystem.drawPowerEffects(ctx);
         
         // Dibujar efectos de ataque del boss (bolas de poder) - limitar a 10 más recientes
         if (bossAttackImage && bossAttackImage.complete) {
@@ -1673,19 +1776,36 @@ const SaintSeiyaGame: React.FC = () => {
           });
         }
         
-        // Dibujar drops (cosmos, health)
+        // Dibujar drops (cosmos, health) - Mejorados visualmente pero sin animaciones
         drops.forEach(drop => {
           if (drop.type === 'health') {
-            // Efecto de cruz para health
-            ctx.fillStyle = '#0F0'; // Verde para vida
-            ctx.fillRect(drop.x - 6, drop.y - 2, 12, 4);
-            ctx.fillRect(drop.x - 2, drop.y - 6, 4, 12);
+            // Cruz de vida con glow suave
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#0F0';
+            ctx.fillStyle = '#0F0'; // Verde brillante para vida
+            ctx.fillRect(drop.x - 7, drop.y - 2, 14, 4);
+            ctx.fillRect(drop.x - 2, drop.y - 7, 4, 14);
+            
+            // Borde blanco para mejor visibilidad
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(drop.x - 7, drop.y - 2, 14, 4);
+            ctx.strokeRect(drop.x - 2, drop.y - 7, 4, 14);
+            ctx.shadowBlur = 0;
           } else {
-            // Cosmos (orbe azul circular)
+            // Cosmos (orbe azul con efecto brillante)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#0FF';
             ctx.fillStyle = '#0FF'; // Azul brillante para cosmos
             ctx.beginPath();
-            ctx.arc(drop.x, drop.y, 5, 0, Math.PI * 2);
+            ctx.arc(drop.x, drop.y, 6, 0, Math.PI * 2);
             ctx.fill();
+            
+            // Borde más oscuro para contraste
+            ctx.strokeStyle = '#07A';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
           }
         });
         
@@ -1777,10 +1897,27 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.restore();
         
         // Dibujar HUD (sin transformación de cámara)
-        ctx.fillStyle = '#0F0';
-        ctx.fillRect(10, 10, 200, 20);
+        // Barra de vida del jugador (mejorada)
+        const playerBarWidth = 200;
+        const playerBarHeight = 20;
+        
+        // Borde negro
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(10, 10, playerBarWidth, playerBarHeight);
+        
+        // Fondo rojo (vida perdida)
         ctx.fillStyle = '#F00';
-        ctx.fillRect(10, 10, 200 * (player.health / player.maxHealth), 20);
+        ctx.fillRect(10, 10, playerBarWidth, playerBarHeight);
+        
+        // Vida actual del jugador (gradiente de rojo a verde)
+        const playerHealthPercent = player.health / player.maxHealth;
+        if (playerHealthPercent > 0) {
+          const red = Math.floor(255 * (1 - playerHealthPercent));
+          const green = Math.floor(255 * playerHealthPercent);
+          ctx.fillStyle = `rgb(${red}, ${green}, 0)`;
+          ctx.fillRect(10, 10, playerBarWidth * playerHealthPercent, playerBarHeight);
+        }
         
         // Barra de Cosmos (reemplaza exp)
         const cosmosRequired = 10 + ((player.level - 1) * 5);
@@ -1798,32 +1935,61 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillText(`Enemigos eliminados: ${waveKills}`, 10, 75);
         ctx.fillText(`Enemigos activos: ${enemies.length}`, 10, 90);
         
-        // Timer del stage
+        // Timer del stage con indicador de boss
         const minutes = Math.floor(stageTime / 60);
         const seconds = stageTime % 60;
-        const timeColor = stageTime >= 180 ? '#0F0' : '#FFF';
+        const timeUntilBoss = Math.max(0, BOSS_CONFIG.SPAWN_TIME - stageTime);
+        const minutesUntilBoss = Math.floor(timeUntilBoss / 60);
+        const secondsUntilBoss = Math.floor(timeUntilBoss % 60);
+        
+        // Color basado en proximidad del boss
+        let timeColor = '#FFF';
+        if (boss) {
+          timeColor = '#FF0000'; // Rojo si el boss está activo
+        } else if (timeUntilBoss <= 30) {
+          timeColor = '#FF4444'; // Rojo si falta menos de 30s
+        } else if (timeUntilBoss <= 60) {
+          timeColor = '#FFAA00'; // Naranja si falta menos de 1 minuto
+        }
+        
         ctx.fillStyle = timeColor;
         ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
         ctx.fillText(`⏱ ${minutes}:${seconds.toString().padStart(2, '0')}`, WIDTH / 2, 30);
+        
+        // Mostrar countdown hasta el boss si no ha aparecido
+        if (!boss && timeUntilBoss > 0) {
+          ctx.fillStyle = timeColor;
+          ctx.font = '14px Arial';
+          ctx.fillText(`⚔️ Boss en ${minutesUntilBoss}:${secondsUntilBoss.toString().padStart(2, '0')}`, WIDTH / 2, 70);
+        } else if (boss) {
+          ctx.fillStyle = '#FF0000';
+          ctx.font = 'bold 16px Arial';
+          ctx.fillText(`⚔️ ¡${boss.gold.name}!`, WIDTH / 2, 70);
+        }
         
         // Oleada actual
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px Arial';
         ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
       }
+        } // Cerrar bloque de ctx
+      } // Cerrar bloque de canvasRef
+      // ===== FIN RENDERIZADO =====
       
-      animationFrameId = requestAnimationFrame(render);
+      // Continuar el loop unificado
+      animationFrameId = requestAnimationFrame(gameLoop);
     };
     
-    render();
+    // Iniciar el loop unificado
+    animationFrameId = requestAnimationFrame(gameLoop);
     
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, enemies, boss, projectiles, drops, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites]);
+  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, gainCosmos, waveNumber, playerSprite, isAttacking, projectileImage, floorImage, camera, stageTime, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites, projectiles, drops, spawnWarnings, score, currentHouse, waveKills]);
 
   // Sin menú de selección - el juego comienza automáticamente
 

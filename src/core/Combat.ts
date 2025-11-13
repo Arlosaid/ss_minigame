@@ -43,6 +43,7 @@ export class CombatSystem {
   /**
    * Calcula la distancia euclidiana entre dos puntos
    * Formula: √((x2-x1)² + (y2-y1)²)
+   * OPTIMIZADO: Usar distanciaSq cuando sea posible
    */
   static calculateDistance(pos1: Position, pos2: Position): number {
     const dx = pos2.x - pos1.x;
@@ -51,7 +52,18 @@ export class CombatSystem {
   }
 
   /**
+   * Calcula la distancia al cuadrado (más rápido, sin sqrt)
+   * Usar para comparaciones de distancia
+   */
+  static calculateDistanceSq(pos1: Position, pos2: Position): number {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    return dx * dx + dy * dy;
+  }
+
+  /**
    * Encuentra el enemigo más cercano dentro del rango de ataque
+   * OPTIMIZADO: Usar distancia al cuadrado para evitar sqrt
    * @param player - Posición del jugador
    * @param enemies - Array de todos los enemigos
    * @param attackRange - Rango máximo de ataque en píxeles
@@ -62,32 +74,22 @@ export class CombatSystem {
     enemies: Enemy[],
     attackRange: number = 300
   ): Enemy | null {
-    console.log(`[findNearestEnemy] Recibido: ${enemies.length} enemigos, rango: ${attackRange}px`);
-    
     if (enemies.length === 0) {
-      console.log('[findNearestEnemy] ❌ Array de enemigos vacío');
       return null;
     }
 
     let nearestEnemy: Enemy | null = null;
-    let minDistance = attackRange; // Solo consideramos enemigos dentro del rango
+    let minDistanceSq = attackRange * attackRange; // Comparar con distancia al cuadrado
 
-    for (const enemy of enemies) {
-      const distance = this.calculateDistance(player, enemy);
-      console.log(`[findNearestEnemy] Enemigo ${enemy.id} en (${enemy.x.toFixed(1)}, ${enemy.y.toFixed(1)}) - Distancia: ${distance.toFixed(1)}px`);
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      const distSq = this.calculateDistanceSq(player, enemy);
       
       // Solo consideramos enemigos dentro del rango de ataque
-      if (distance <= attackRange && distance < minDistance) {
-        minDistance = distance;
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
         nearestEnemy = enemy;
-        console.log(`[findNearestEnemy] ✅ Nuevo enemigo más cercano: ${enemy.id} a ${distance.toFixed(1)}px`);
       }
-    }
-
-    if (nearestEnemy) {
-      console.log(`[findNearestEnemy] 🎯 Retornando enemigo ${nearestEnemy.id} a ${minDistance.toFixed(1)}px`);
-    } else {
-      console.log(`[findNearestEnemy] ❌ NO hay enemigos dentro del rango de ${attackRange}px`);
     }
 
     return nearestEnemy;

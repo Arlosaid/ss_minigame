@@ -33,9 +33,9 @@ export const BRONZE_KNIGHTS: Knight[] = [
     color: '#FF4444',
     projectileColor: '#FFD700',
     attack: 'Meteoros de Pegaso',
-    speed: 3.5, // Aumentado de 3
-    fireRate: 800, // Reducido de 1500 (más rápido)
-    damage: 18 // Aumentado de 12
+    speed: 2.5, // ⚡ Velocidad balanceada (300px/s real - jugable pero mejorable)
+    fireRate: 900, // ⚡ Cooldown 0.9s (equilibrado)
+    damage: 15 // ⚡ Daño inicial razonable
   },
   {
     id: 'dragon',
@@ -75,13 +75,16 @@ export const GOLD_SAINTS: GoldSaint[] = [
   { name: 'Afrodita de Piscis', house: 'Piscis', color: '#FF69B4', attack: 'Rosas Diabólicas' }
 ];
 
-// Mejoras con bonos mejorados
+// ⚡ Mejoras balanceadas para progresión tipo Vampire Survivors
 export const UPGRADES: Upgrade[] = [
-  { id: 'damage', name: 'Cosmos Aumentado', desc: '+3 Daño por nivel', icon: '⚡', levels: [3, 6, 10, 15, 20] },
-  { id: 'speed', name: 'Velocidad Divina', desc: '+25% Velocidad por nivel', icon: '💨', levels: [0.75, 1.5, 2.3, 3.2, 4.0] },
-  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Dispara más rápido (-80ms)', icon: '🔥', levels: [80, 160, 240, 320, 400] },
-  { id: 'multiShot', name: 'Meteoros Múltiples', desc: 'Dispara proyectiles adicionales', icon: '✨', levels: [1, 2, 3, 4, 5] },
-  { id: 'pierce', name: 'Penetración Cósmica', desc: '+30% Rango por nivel', icon: '🎯', levels: [1, 2, 3, 4, 5] },
-  { id: 'maxHealth', name: 'Armadura Divina', desc: '+75 HP Máximo por nivel', icon: '💚', levels: [75, 150, 225, 300, 375] },
-  { id: 'explosion', name: 'Explosión de Cosmos', desc: 'Área de daño al impactar', icon: '💥', levels: [30, 50, 80, 120, 150] }
+  { id: 'damage', name: 'Cosmos Aumentado', desc: '+3 Daño (+30% potencia)', icon: '⚡', levels: [3, 6, 10, 15, 20] },
+  { id: 'speed', name: 'Velocidad Divina', desc: '+15% Velocidad', icon: '💨', levels: [0.15, 0.30, 0.50, 0.75, 1.0] },
+  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Ataque más rápido (-200ms)', icon: '🔥', levels: [200, 400, 600, 800, 1000] },
+  { id: 'multiShot', name: 'Meteoros Múltiples', desc: '+1 Proyectil adicional', icon: '✨', levels: [1, 2, 3, 4, 5] },
+  { id: 'pierce', name: 'Alcance Cósmico', desc: '+25% Rango de ataque', icon: '🎯', levels: [1, 2, 3, 4, 5] },
+  { id: 'maxHealth', name: 'Armadura Divina', desc: '+75 HP Máximo', icon: '💚', levels: [75, 150, 225, 300, 375] },
+  { id: 'explosion', name: 'Explosión de Cosmos', desc: 'Área de daño al impactar', icon: '💥', levels: [30, 50, 80, 120, 150] },
+  { id: 'lightning', name: 'Rayo de Zeus', desc: 'Truenos divinos caen hacia donde miras', icon: '⚡', levels: [1, 2, 3, 4, 5] },
+  { id: 'goldenArrow', name: 'Flecha de Oro', desc: 'Flechas divinas buscan enemigos cercanos', icon: '🏹', levels: [1, 2, 3, 4, 5] },
+  { id: 'athenaShield', name: 'Escudo de Atena', desc: 'Escudo protector que absorbe y refleja daño', icon: '🛡️', levels: [1, 2, 3, 4, 5] }
 ];
