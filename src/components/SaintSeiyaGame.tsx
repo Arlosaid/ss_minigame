@@ -118,6 +118,7 @@ const SaintSeiyaGame: React.FC = () => {
   const [screenShake, setScreenShake] = useState({ x: 0, y: 0 });
   const stageStartTime = useRef<number>(0);
   const backgroundMusic = useRef<HTMLAudioElement | null>(null);
+  const playerRef = useRef<Player | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -125,6 +126,11 @@ const SaintSeiyaGame: React.FC = () => {
   const nextOrbId = useRef(0);
   const nextWarningId = useRef(0);
   const lastFrameTime = useRef<number>(Date.now());
+  
+  // Mantener playerRef actualizado
+  useEffect(() => {
+    playerRef.current = player;
+  }, [player]);
 
   const selectKnight = async (knight: Knight) => {
     const initialX = MAP_WIDTH / 2;
@@ -386,7 +392,10 @@ const SaintSeiyaGame: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!gameStarted || !player || gameState !== 'playing' || boss) return;
+    if (!gameStarted || gameState !== 'playing' || boss) {
+      console.log('🔍 SPAWN SYSTEM DISABLED:', { gameStarted, gameState, hasBoss: !!boss });
+      return;
+    }
     
     // Sistema progresivo de survival: empieza cada 2 segundos, reduce progresivamente
     const baseInterval = 2000; // 2 segundos iniciales
@@ -396,6 +405,9 @@ const SaintSeiyaGame: React.FC = () => {
     console.log(`🎮 SPAWN SYSTEM ACTIVE: Intervalo ${spawnInterval}ms | Oleada ${waveNumber}`);
     
     const interval = setInterval(() => {
+      const currentPlayer = playerRef.current;
+      if (!currentPlayer) return;
+      
       // Sistema de oleadas progresivo
       let availableTypes: Array<'normal' | 'fast' | 'tank'> = ['normal'];
       if (waveNumber >= 2) availableTypes.push('fast');
@@ -403,21 +415,20 @@ const SaintSeiyaGame: React.FC = () => {
       
       const type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
       
-      // Spawn en posiciones ALEATORIAS DENTRO del mapa visible
-      let x = 50 + Math.random() * (MAP_WIDTH - 100);
-      let y = 50 + Math.random() * (MAP_HEIGHT - 100);
+      // Spawn en un ANILLO alrededor del jugador (350-500 píxeles de distancia)
+      // Esto asegura que los enemigos aparezcan justo fuera del viewport pero cerca
+      const spawnDistance = 350 + Math.random() * 150; // 350-500 píxeles del jugador
+      const angle = Math.random() * Math.PI * 2; // Ángulo aleatorio (0-360 grados)
       
-      // Evitar spawn muy cerca del jugador (mínimo 200px)
-      if (player) {
-        const dist = Math.hypot(x - player.x, y - player.y);
-        if (dist < 200) {
-          // Intentar una segunda vez
-          x = 50 + Math.random() * (MAP_WIDTH - 100);
-          y = 50 + Math.random() * (MAP_HEIGHT - 100);
-        }
-      }
+      let x = currentPlayer.x + Math.cos(angle) * spawnDistance;
+      let y = currentPlayer.y + Math.sin(angle) * spawnDistance;
       
-      console.log(`🎯 CREATING WARNING at (${Math.floor(x)}, ${Math.floor(y)}) type: ${type}`);
+      // Mantener dentro de los límites del mapa
+      x = Math.max(50, Math.min(MAP_WIDTH - 50, x));
+      y = Math.max(50, Math.min(MAP_HEIGHT - 50, y));
+      
+      const distanceFromPlayer = Math.hypot(x - currentPlayer.x, y - currentPlayer.y);
+      console.log(`🎯 CREATING WARNING at (${Math.floor(x)}, ${Math.floor(y)}) type: ${type} | Distance from player: ${Math.floor(distanceFromPlayer)}`);
       
       // Crear advertencia de spawn (0.8 segundos)
       const warning: SpawnWarning = {
@@ -439,8 +450,11 @@ const SaintSeiyaGame: React.FC = () => {
       });
     }, spawnInterval);
     
-    return () => clearInterval(interval);
-  }, [gameStarted, player, gameState, waveNumber, boss]);
+    return () => {
+      console.log('🛑 CLEARING SPAWN INTERVAL');
+      clearInterval(interval);
+    };
+  }, [gameStarted, gameState, waveNumber, boss]);
 
   useEffect(() => {
     if (!gameStarted || !player || gameState !== 'playing') return;
