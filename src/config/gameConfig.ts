@@ -54,8 +54,8 @@ export const ENEMY_CONFIG = {
   // Límites
   BASE_MAX_ACTIVE_ENEMIES: 8, // Máximo de enemigos activos en oleada 1
   MAX_ACTIVE_ENEMIES_INCREMENT: 1.5, // Incremento por oleada
-  MAX_ACTIVE_ENEMIES_CAP: 15, // Máximo absoluto de enemigos
-  MAX_WARNINGS: 10, // Máximo de advertencias de spawn simultáneas
+  MAX_ACTIVE_ENEMIES_CAP: 12, // Máximo absoluto de enemigos (reducido de 15)
+  MAX_WARNINGS: 8, // Máximo de advertencias de spawn simultáneas (reducido de 10)
   CLEANUP_DISTANCE: 1200, // Distancia para limpiar enemigos lejanos
   
   // Escalado de dificultad
@@ -211,8 +211,22 @@ export const VISUAL_CONFIG = {
   PROJECTILE_SPRITE_SIZE: 24,
   
   // Efectos
-  MAX_ATTACK_EFFECTS: 15, // Máximo de efectos de ataque del boss simultáneos
+  MAX_ATTACK_EFFECTS: 10, // Máximo de efectos de ataque del boss simultáneos (reducido de 15)
   PROJECTILE_TRAIL_LENGTH: 2, // Número de círculos en el trail de proyectiles
+} as const;
+
+// ============================================
+// ⚡ CONFIGURACIÓN DE PODERES ESPECIALES
+// ============================================
+export const POWER_CONFIG = {
+  // Rayo de Zeus
+  LIGHTNING_DISTANCE_BASE: 120, // Distancia base de los rayos (nivel 1)
+  LIGHTNING_DISTANCE_INCREMENT: 40, // Incremento por nivel
+  LIGHTNING_SPAWN_HEIGHT: 400, // Altura desde donde cae el rayo (reducido de 500)
+  LIGHTNING_DELAY: 100, // Delay entre rayos (reducido de 120ms)
+  LIGHTNING_DAMAGE_RADIUS: 50, // Radio de daño - ajustado para ser más preciso (antes 70-80)
+  LIGHTNING_DURATION: 400, // Duración del efecto visual (reducido de 500ms)
+  LIGHTNING_IMPACT_DURATION: 500, // Duración de la explosión (reducido de 700ms)
 } as const;
 
 // ============================================

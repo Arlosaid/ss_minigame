@@ -3,6 +3,7 @@ import type { Knight, GoldSaint, Upgrade } from '../data/gameData';
 import { BRONZE_KNIGHTS, GOLD_SAINTS, UPGRADES } from '../data/gameData';
 import { createPlayerSprite, createEnemySprite, createBossSprite, AnimatedSprite } from '../systems/SpriteSystem';
 import { CombatSystem } from '../core/Combat';
+import { PowerSystem } from '../systems/PowerSystem';
 import {
   PLAYER_CONFIG,
   ENEMY_CONFIG,
@@ -99,6 +100,7 @@ interface PlayerUpgrades {
   multiShot: number;
   maxHealth: number;
   explosion: number;
+  lightning: number;
 }
 
 interface BossAttackEffect {
@@ -158,7 +160,8 @@ const SaintSeiyaGame: React.FC = () => {
     fireRate: 0,
     multiShot: 0,
     maxHealth: 0,
-    explosion: 0
+    explosion: 0,
+    lightning: 0
   });
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
   const [playerSprite, setPlayerSprite] = useState<AnimatedSprite | null>(null);
@@ -185,6 +188,7 @@ const SaintSeiyaGame: React.FC = () => {
   const dropsRef = useRef<Drop[]>([]);
   const spawnWarningsRef = useRef<SpawnWarning[]>([]);
   const lastCleanupTime = useRef<number>(0);
+  const lastLightningTrigger = useRef<number>(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -756,6 +760,83 @@ const SaintSeiyaGame: React.FC = () => {
       }
       // ===== FIN SISTEMA DE DISPARO =====
       
+      // ===== SISTEMA DE RAYO DE ZEUS =====
+      const nowLightning = Date.now();
+      if (upgrades.lightning > 0) {
+        const lightningLevel = upgrades.lightning;
+        const lightningCooldown = PowerSystem.getLightningCooldown(lightningLevel);
+        
+        if (nowLightning - lastLightningTrigger.current >= lightningCooldown) {
+          lastLightningTrigger.current = nowLightning;
+          
+          // Calcular dirección del jugador basado en movimiento
+          let dirX = 0, dirY = 0;
+          if (keysPressed.has('w') || keysPressed.has('arrowup')) dirY -= 1;
+          if (keysPressed.has('s') || keysPressed.has('arrowdown')) dirY += 1;
+          if (keysPressed.has('a') || keysPressed.has('arrowleft')) dirX -= 1;
+          if (keysPressed.has('d') || keysPressed.has('arrowright')) dirX += 1;
+          
+          // Si no hay movimiento, usar dirección hacia el enemigo más cercano
+          if (dirX === 0 && dirY === 0) {
+            const nearestEnemy = CombatSystem.findNearestEnemy(
+              { x: currentPlayer.x, y: currentPlayer.y },
+              currentEnemies,
+              PLAYER_CONFIG.ATTACK_RANGE
+            );
+            if (nearestEnemy) {
+              dirX = nearestEnemy.x - currentPlayer.x;
+              dirY = nearestEnemy.y - currentPlayer.y;
+            } else {
+              dirX = 1; // Default derecha
+            }
+          }
+          
+          // Activar rayo
+          PowerSystem.triggerLightningStrike(
+            currentPlayer.x,
+            currentPlayer.y,
+            dirX,
+            dirY,
+            lightningLevel,
+            currentEnemies,
+            (enemyId, damage) => {
+              setEnemies(prev => prev.map(e => {
+                if (e.id === enemyId) {
+                  const newHealth = e.health - damage;
+                  if (newHealth <= 0) {
+                    // Crear drop
+                    const rand = Math.random();
+                    setDrops(prevDrops => [...prevDrops, {
+                      id: nextOrbId.current++,
+                      x: e.x,
+                      y: e.y,
+                      type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                      value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
+                      lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                    }]);
+                    setScore(s => s + 100);
+                    setWaveKills(k => {
+                      const newKills = k + 1;
+                      if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                        setWaveNumber(w => w + 1);
+                        return 0;
+                      }
+                      return newKills;
+                    });
+                    return null; // Eliminar enemigo
+                  }
+                  return { ...e, health: newHealth };
+                }
+                return e;
+              }).filter(e => e !== null) as Enemy[]);
+            }
+          );
+        }
+      }
+      // Actualizar efectos del PowerSystem
+      PowerSystem.updateEffects();
+      // ===== FIN SISTEMA DE RAYO =====
+      
       // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
       const now = Date.now();
       setSpawnWarnings(prev => {
@@ -810,7 +891,6 @@ const SaintSeiyaGame: React.FC = () => {
       
       // Combinar proyectiles existentes con los nuevos del disparo
       const allProjectiles = [...currentProjectiles, ...projectilesToAdd];
-      console.log(`[FRAME] Total proyectiles a procesar: ${allProjectiles.length} (${currentProjectiles.length} existentes + ${projectilesToAdd.length} nuevos)`);
       
       // PASO 1: Mover proyectiles
       const movedProjectiles: Projectile[] = [];
@@ -1335,38 +1415,14 @@ const SaintSeiyaGame: React.FC = () => {
         });
       });
       
-      // Continuar el loop
-      animationFrameId = requestAnimationFrame(gameLoop);
-    };
-    
-    // Iniciar el loop
-    animationFrameId = requestAnimationFrame(gameLoop);
-    
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropItem, gainCosmos, waveNumber]);
-
-  useEffect(() => {
-    if (!canvasRef.current || !player || !gameStarted) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    let animationFrameId: number;
-    
-    const render = () => {
-      // Calcular deltaTime para animaciones
-      const now = Date.now();
-      const deltaTime = (now - lastFrameTime.current) / 1000;
-      lastFrameTime.current = now;
-      
-      // Actualizar sprite del jugador cada frame (no throttled)
-      if (playerSprite) {
-        playerSprite.update(deltaTime);
+      // ===== RENDERIZADO INMEDIATO EN EL MISMO LOOP =====
+      if (canvasRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Actualizar sprite del jugador cada frame
+          if (playerSprite) {
+            playerSprite.update(deltaTime);
         
         // Determinar animación
         if (isAttacking) {
@@ -1590,6 +1646,10 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Dibujar efectos de ataque
         CombatSystem.drawAttackEffects(ctx);
+        
+        // Dibujar efectos de Rayo de Zeus
+        PowerSystem.drawLightning(ctx);
+        PowerSystem.drawPowerEffects(ctx);
         
         // Dibujar efectos de ataque del boss (bolas de poder) - limitar a 10 más recientes
         if (bossAttackImage && bossAttackImage.complete) {
@@ -1862,18 +1922,23 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.font = '16px Arial';
         ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
       }
+        } // Cerrar bloque de ctx
+      } // Cerrar bloque de canvasRef
+      // ===== FIN RENDERIZADO =====
       
-      animationFrameId = requestAnimationFrame(render);
+      // Continuar el loop unificado
+      animationFrameId = requestAnimationFrame(gameLoop);
     };
     
-    render();
+    // Iniciar el loop unificado
+    animationFrameId = requestAnimationFrame(gameLoop);
     
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, enemies, boss, projectiles, drops, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites]);
+  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, gainCosmos, waveNumber, playerSprite, isAttacking, projectileImage, floorImage, camera, stageTime, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites, projectiles, drops, spawnWarnings, score, currentHouse, waveKills]);
 
   // Sin menú de selección - el juego comienza automáticamente
 

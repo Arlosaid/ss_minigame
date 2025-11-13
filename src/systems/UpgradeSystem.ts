@@ -1,13 +1,53 @@
-import { Upgrade, Player, PermanentUpgrade } from '../types/game';
+import { Upgrade, Player, PermanentUpgrade, ActivePower } from '../types/game';
+import { PowerSystem } from './PowerSystem';
 
 export class UpgradeSystem {
-  static temporaryUpgrades: Upgrade[] = [
+  // ============================================
+  // 🌟 PODERES ACTIVOS (con niveles escalables)
+  // ============================================
+  static activePowers: Upgrade[] = [
+    {
+      id: 'lightning_strike',
+      name: 'Rayo de Zeus',
+      description: 'Invoca truenos para atacar a los enemigos en una area pequeña al frente',
+      icon: '⚡',
+      tier: 1,
+      type: 'power',
+      maxLevel: 5,
+      apply: (player: Player) => {
+        // Buscar si ya tiene este poder
+        const existingPower = player.activePowers.find(p => p.id === 'lightning_strike');
+        
+        if (existingPower) {
+          // Subir nivel del poder
+          existingPower.level = Math.min(existingPower.level + 1, 5);
+          existingPower.cooldown = PowerSystem.getLightningCooldown(existingPower.level);
+        } else {
+          // Agregar poder nuevo
+          const newPower: ActivePower = {
+            id: 'lightning_strike',
+            level: 1,
+            lastTrigger: 0,
+            cooldown: PowerSystem.getLightningCooldown(1)
+          };
+          player.activePowers.push(newPower);
+        }
+      }
+    }
+  ];
+
+  // ============================================
+  // 📊 MEJORAS DE ESTADÍSTICAS
+  // ============================================
+  static statUpgrades: Upgrade[] = [
     {
       id: 'damage_boost',
       name: 'Puño de Pegaso',
       description: '+15% Daño',
       icon: '👊',
       tier: 1,
+      type: 'stat',
+      maxLevel: 10,
       apply: (player: Player) => {
         player.stats.damage *= 1.15;
       }
@@ -16,8 +56,10 @@ export class UpgradeSystem {
       id: 'speed_boost',
       name: 'Velocidad de Meteoro',
       description: '+20% Velocidad de Movimiento',
-      icon: '⚡',
+      icon: '🏃',
       tier: 1,
+      type: 'stat',
+      maxLevel: 8,
       apply: (player: Player) => {
         player.stats.speed *= 1.2;
       }
@@ -28,6 +70,8 @@ export class UpgradeSystem {
       description: '+25% Rango de Ataque',
       icon: '🎯',
       tier: 1,
+      type: 'stat',
+      maxLevel: 6,
       apply: (player: Player) => {
         player.stats.attackRange *= 1.25;
       }
@@ -38,6 +82,8 @@ export class UpgradeSystem {
       description: '+30% Velocidad de Ataque',
       icon: '⚔️',
       tier: 1,
+      type: 'stat',
+      maxLevel: 8,
       apply: (player: Player) => {
         player.stats.attackSpeed *= 1.3;
       }
@@ -48,63 +94,62 @@ export class UpgradeSystem {
       description: '+50 HP Máximos',
       icon: '🛡️',
       tier: 1,
+      type: 'stat',
+      maxLevel: 10,
       apply: (player: Player) => {
         player.stats.maxHp += 50;
         player.stats.currentHp += 50;
       }
     },
     {
-      id: 'life_steal',
-      name: 'Cosmos Vampírico',
-      description: 'Recupera 10% del daño como vida',
-      icon: '💉',
-      tier: 2,
-      apply: (player: Player) => {
-        // Esta mejora necesita lógica especial en el combat system
-        player.upgrades.push({
-          id: 'life_steal_effect',
-          name: 'Life Steal Active',
-          description: '',
-          icon: '',
-          tier: 2,
-          apply: () => {}
-        });
-      }
-    },
-    {
-      id: 'area_damage',
-      name: 'Explosión de Cosmos',
-      description: 'Ataques golpean múltiples enemigos',
-      icon: '💥',
-      tier: 3,
-      apply: (player: Player) => {
-        player.upgrades.push({
-          id: 'area_damage_effect',
-          name: 'Area Damage Active',
-          description: '',
-          icon: '',
-          tier: 3,
-          apply: () => {}
-        });
-      }
-    },
-    {
-      id: 'critical_strike',
+      id: 'critical_rate',
       name: 'Golpe Crítico',
-      description: '20% probabilidad de x2 daño',
+      description: '+10% Probabilidad de Crítico',
       icon: '💫',
       tier: 2,
+      type: 'stat',
+      maxLevel: 5,
       apply: (player: Player) => {
+        // Esta mejora necesita lógica especial en el combat system
         player.upgrades.push({
           id: 'critical_effect',
           name: 'Critical Strike Active',
           description: '',
           icon: '',
           tier: 2,
+          type: 'stat',
+          maxLevel: 1,
+          apply: () => {}
+        });
+      }
+    },
+    {
+      id: 'life_regeneration',
+      name: 'Regeneración',
+      description: '+2 HP por segundo',
+      icon: '💚',
+      tier: 2,
+      type: 'stat',
+      maxLevel: 5,
+      apply: (player: Player) => {
+        player.upgrades.push({
+          id: 'regen_effect',
+          name: 'Regeneration Active',
+          description: '',
+          icon: '',
+          tier: 2,
+          type: 'stat',
+          maxLevel: 1,
           apply: () => {}
         });
       }
     }
+  ];
+
+  // Combinar todos los upgrades temporales
+  static temporaryUpgrades: Upgrade[] = [
+    ...UpgradeSystem.activePowers,
+    ...UpgradeSystem.statUpgrades
   ];
 
   static permanentUpgrades: PermanentUpgrade[] = [
@@ -160,7 +205,21 @@ export class UpgradeSystem {
     }
   ];
 
-  static getRandomUpgrades(count: number = 3, playerLevel: number): Upgrade[] {
+  static getRandomUpgrades(count: number = 3, playerLevel: number, isFirstChoice: boolean = false): Upgrade[] {
+    // En la primera elección, SIEMPRE incluir Rayo Divino
+    if (isFirstChoice) {
+      const lightningPower = this.activePowers.find(u => u.id === 'lightning_strike');
+      if (!lightningPower) return this.getRandomUpgrades(count, playerLevel, false);
+      
+      // Seleccionar 2 upgrades adicionales aleatorios
+      const otherUpgrades = this.statUpgrades
+        .filter(u => u.tier <= Math.floor(playerLevel / 3) + 1)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, count - 1);
+      
+      return [lightningPower, ...otherUpgrades];
+    }
+
     // Filtrar upgrades disponibles según el tier y nivel del jugador
     const availableUpgrades = this.temporaryUpgrades.filter(
       upgrade => upgrade.tier <= Math.floor(playerLevel / 3) + 1
@@ -177,7 +236,7 @@ export class UpgradeSystem {
       const index = Math.floor(Math.random() * availableUpgrades.length);
       if (!used.has(index)) {
         used.add(index);
-        selected.push(availableUpgrades[index]);
+        selected.push(availableUpgrades[index]!);
       }
     }
 
@@ -185,11 +244,30 @@ export class UpgradeSystem {
   }
 
   static applyUpgrade(player: Player, upgrade: Upgrade): void {
+    // Aplicar el upgrade
     upgrade.apply(player);
-    player.upgrades.push(upgrade);
+    
+    // Actualizar o agregar el upgrade al array del jugador
+    const existingIndex = player.upgrades.findIndex(u => u.id === upgrade.id);
+    if (existingIndex >= 0) {
+      // Actualizar nivel existente
+      const existing = player.upgrades[existingIndex]!;
+      player.upgrades[existingIndex] = {
+        ...existing,
+        currentLevel: Math.min((existing.currentLevel || 0) + 1, upgrade.maxLevel)
+      };
+    } else {
+      // Agregar nuevo upgrade
+      player.upgrades.push({ ...upgrade, currentLevel: 1 });
+    }
   }
 
   static hasUpgradeEffect(player: Player, effectId: string): boolean {
     return player.upgrades.some(u => u.id === effectId);
+  }
+
+  static getUpgradeLevel(player: Player, upgradeId: string): number {
+    const upgrade = player.upgrades.find(u => u.id === upgradeId);
+    return upgrade?.currentLevel || 0;
   }
 }

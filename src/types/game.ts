@@ -39,6 +39,7 @@ export interface Player extends Entity {
   level: number;
   cosmos: number; // Energía Cósmica (reemplaza al oro)
   upgrades: Upgrade[];
+  activePowers: ActivePower[]; // Nuevo: poderes activos del jugador
   magnetActive: boolean; // Estado del efecto magnético
   magnetDuration: number; // Duración restante del magnet
 }
@@ -53,7 +54,18 @@ export interface Upgrade {
   description: string;
   icon: string;
   tier: number;
+  type: 'stat' | 'power'; // Nuevo: distinguir entre mejoras de estadísticas y poderes
+  maxLevel: number; // Nuevo: nivel máximo de la mejora
+  currentLevel?: number; // Nuevo: nivel actual
   apply: (player: Player) => void;
+}
+
+// Nuevo: Interface para poderes activos que se ejecutan periódicamente
+export interface ActivePower {
+  id: string;
+  level: number;
+  lastTrigger: number;
+  cooldown: number; // milisegundos
 }
 
 export interface Drop {
