@@ -14,14 +14,14 @@ export const PLAYER_CONFIG = {
   SPEED_UPGRADE_MULTIPLIER: 0.5, // Multiplicador por nivel de upgrade de velocidad
   
   // Combate
-  BASE_DAMAGE: 18, // Daño base del jugador
-  DAMAGE_UPGRADE_BONUS: 5, // Daño adicional por nivel de upgrade
+  BASE_DAMAGE: 35, // Daño base del jugador (aumentado de 18 para balancear)
+  DAMAGE_UPGRADE_BONUS: 10, // Daño adicional por nivel de upgrade (doblado de 5)
   
   // Disparo
   BASE_FIRE_RATE: 500, // Milisegundos entre disparos
   FIRE_RATE_REDUCTION_PER_LEVEL: 50, // Reducción de cooldown por nivel de upgrade
   MIN_FIRE_RATE: 100, // Cooldown mínimo (ms)
-  ATTACK_RANGE: 200, // Rango de detección de enemigos para disparo automático
+  ATTACK_RANGE: 120, // Rango de detección de enemigos para disparo automático - Reducido para forzar movimiento
   
   // Proyectiles
   PROJECTILE_SPEED: 2.0, // Velocidad de los proyectiles del jugador
@@ -29,9 +29,9 @@ export const PLAYER_CONFIG = {
   MAX_PROJECTILES: 30, // Límite de proyectiles simultáneos
   
   // Vida
-  STARTING_HEALTH: 100,
-  STARTING_MAX_HEALTH: 100,
-  MAX_HEALTH_UPGRADE_BONUS: 75, // HP adicional por nivel de upgrade de vida
+  STARTING_HEALTH: 150, // Aumentado de 100 para sobrevivir hordas
+  STARTING_MAX_HEALTH: 150,
+  MAX_HEALTH_UPGRADE_BONUS: 100, // HP adicional por nivel de upgrade de vida (aumentado de 75)
   
   // Progresión
   STARTING_LEVEL: 1,
@@ -44,54 +44,54 @@ export const PLAYER_CONFIG = {
 // ============================================
 export const ENEMY_CONFIG = {
   // Spawn
-  BASE_SPAWN_INTERVAL: 2500, // Milisegundos entre spawns (oleada 1)
-  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 80, // Reducción del intervalo por oleada
-  MIN_SPAWN_INTERVAL: 1000, // Intervalo mínimo (ms)
+  BASE_SPAWN_INTERVAL: 1500, // Milisegundos entre spawns (oleada 1) - Reducido de 2500ms
+  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 150, // Reducción del intervalo por oleada - Aumentado para progresión rápida
+  MIN_SPAWN_INTERVAL: 300, // Intervalo mínimo (ms) - SPAWN MASIVO cada 0.3s
   SPAWN_DISTANCE_MIN: 350, // Distancia mínima de spawn desde el jugador
   SPAWN_DISTANCE_MAX: 500, // Distancia máxima de spawn desde el jugador
-  WARNING_DURATION: 800, // Duración de la advertencia de spawn (ms)
+  WARNING_DURATION: 500, // Duración de la advertencia de spawn (ms) - Reducido para spawns rápidos
   
   // Límites
-  BASE_MAX_ACTIVE_ENEMIES: 8, // Máximo de enemigos activos en oleada 1
-  MAX_ACTIVE_ENEMIES_INCREMENT: 1.5, // Incremento por oleada
-  MAX_ACTIVE_ENEMIES_CAP: 12, // Máximo absoluto de enemigos (reducido de 15)
-  MAX_WARNINGS: 8, // Máximo de advertencias de spawn simultáneas (reducido de 10)
+  BASE_MAX_ACTIVE_ENEMIES: 15, // Máximo de enemigos activos en oleada 1 - HORDAS GRANDES
+  MAX_ACTIVE_ENEMIES_INCREMENT: 3, // Incremento por oleada - Progresión agresiva
+  MAX_ACTIVE_ENEMIES_CAP: 30, // Máximo absoluto de enemigos - HORDAS MASIVAS
+  MAX_WARNINGS: 15, // Máximo de advertencias de spawn simultáneas - AUMENTADO PARA SPAWNS MASIVOS
   CLEANUP_DISTANCE: 1200, // Distancia para limpiar enemigos lejanos
   
   // Escalado de dificultad
-  HP_MULTIPLIER_PER_WAVE: 0.12, // +12% HP por oleada
-  SPEED_MULTIPLIER_PER_WAVE: 0.05, // +5% velocidad por oleada
+  HP_MULTIPLIER_PER_WAVE: 0.25, // +25% HP por oleada (aumentado de 0.12 para enemigos más resistentes)
+  SPEED_MULTIPLIER_PER_WAVE: 0.08, // +8% velocidad por oleada (aumentado de 0.05)
   
   // Tipos de enemigos
   NORMAL: {
-    BASE_HP: 15,
-    HP_PER_WAVE: 3,
-    SPEED: 0.85,
+    BASE_HP: 45, // Triplicado de 15 para enemigos más resistentes
+    HP_PER_WAVE: 10, // Triplicado de 3 para escalado agresivo
+    SPEED: 1.0, // Aumentado de 0.85 para más agresividad
     COSMOS_MIN: 2,
     COSMOS_MAX: 4,
   },
   FAST: {
-    BASE_HP: 10,
-    HP_PER_WAVE: 2,
-    SPEED: 1.6,
+    BASE_HP: 30, // Triplicado de 10
+    HP_PER_WAVE: 6, // Triplicado de 2
+    SPEED: 1.8, // Aumentado de 1.6 para enemigos rápidos más peligrosos
     COSMOS_MIN: 3,
     COSMOS_MAX: 5,
     UNLOCK_WAVE: 2, // Se desbloquea en oleada 2
   },
   TANK: {
-    BASE_HP: 30,
-    HP_PER_WAVE: 5,
-    SPEED: 0.45,
+    BASE_HP: 90, // Triplicado de 30 - verdaderos tanques
+    HP_PER_WAVE: 15, // Triplicado de 5
+    SPEED: 0.6, // Aumentado de 0.45 para que tanks sean más amenazantes
     COSMOS_MIN: 5,
     COSMOS_MAX: 8,
     UNLOCK_WAVE: 3, // Se desbloquea en oleada 3
   },
   
   // Comportamiento
-  BASE_MOVEMENT_SPEED: 120, // Píxeles por segundo
+  BASE_MOVEMENT_SPEED: 150, // Píxeles por segundo - Aumentado para enemigos más agresivos
   COLLISION_RADIUS: 30, // Radio de colisión con jugador
   PROJECTILE_HIT_RADIUS: 30, // Radio de colisión con proyectiles
-  DAMAGE_TO_PLAYER: 5, // Daño al tocar al jugador
+  DAMAGE_TO_PLAYER: 15, // Daño al tocar al jugador (triplicado de 5 para amenaza real)
 } as const;
 
 // ============================================
@@ -102,8 +102,8 @@ export const BOSS_CONFIG = {
   SPAWN_TIME: 120, // Segundos después de iniciar el stage (2 minutos)
   
   // Estadísticas
-  BASE_HP: 500,
-  HP_INCREMENT_PER_HOUSE: 200, // HP adicional por cada casa
+  BASE_HP: 1500, // Triplicado de 500 para boss más desafiante
+  HP_INCREMENT_PER_HOUSE: 500, // HP adicional por cada casa (aumentado de 200)
   COLLISION_RADIUS: 50,
   
   // Ataques
@@ -117,10 +117,10 @@ export const BOSS_CONFIG = {
   PROJECTILE_SPEED_FAST: 4, // Velocidad rápida (patrón direccional)
   
   // Daño
-  REGULAR_PROJECTILE_DAMAGE_LOW: 10, // Patrón espiral
-  REGULAR_PROJECTILE_DAMAGE_MEDIUM: 15, // Patrón circular
-  REGULAR_PROJECTILE_DAMAGE_HIGH: 20, // Patrón direccional
-  SUPER_ATTACK_DAMAGE: 30, // Daño del super ataque
+  REGULAR_PROJECTILE_DAMAGE_LOW: 20, // Patrón espiral (doblado de 10)
+  REGULAR_PROJECTILE_DAMAGE_MEDIUM: 30, // Patrón circular (doblado de 15)
+  REGULAR_PROJECTILE_DAMAGE_HIGH: 40, // Patrón direccional (doblado de 20)
+  SUPER_ATTACK_DAMAGE: 50, // Daño del super ataque (aumentado de 30)
   
   // Super Ataque
   SUPER_ATTACK_WARNING_DURATION: 1500, // Duración de advertencia (ms)
@@ -154,8 +154,8 @@ export const DROPS_CONFIG = {
   MAGNET_SPEED: 300, // Velocidad de atracción (píxeles/segundo)
   
   // Límites
-  MAX_DROPS: 30, // Máximo de drops en el mapa simultáneamente
-  MAX_DROPS_DISPLAY: 20, // Máximo que se mantienen antes de limpiar los más viejos
+  MAX_DROPS: 50, // Máximo de drops en el mapa simultáneamente - Aumentado para más enemigos
+  MAX_DROPS_DISPLAY: 35, // Máximo que se mantienen antes de limpiar los más viejos
 } as const;
 
 // ============================================
@@ -176,7 +176,7 @@ export const PROJECTILE_CONFIG = {
 // 🌊 CONFIGURACIÓN DE OLEADAS
 // ============================================
 export const WAVE_CONFIG = {
-  ENEMIES_TO_KILL_PER_WAVE: 25, // Enemigos a matar para avanzar de oleada
+  ENEMIES_TO_KILL_PER_WAVE: 40, // Enemigos a matar para avanzar de oleada - Aumentado para oleadas más largas
   SPECIAL_ENEMY_CHANCE_AFTER_WAVE_5: 0.3, // 30% de enemigos especiales en oleadas altas
 } as const;
 
@@ -187,8 +187,8 @@ export const MAP_CONFIG = {
   // Tamaño
   VIEWPORT_WIDTH: 800, // Ancho visible de la pantalla
   VIEWPORT_HEIGHT: 600, // Alto visible de la pantalla
-  MAP_WIDTH: 1600, // Ancho total del mapa
-  MAP_HEIGHT: 1200, // Alto total del mapa
+  MAP_WIDTH: 1200, // Ancho total del mapa - Reducido para gameplay más intenso
+  MAP_HEIGHT: 900, // Alto total del mapa - Reducido para gameplay más intenso
   
   // Límites del jugador
   PLAYER_BOUNDARY_MARGIN: 20, // Margen desde los bordes del mapa

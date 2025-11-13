@@ -1102,6 +1102,187 @@ for (let i = 0; i < currentEnemies.length; i++) {
 
 ---
 
+## 🎮 MEJORAS DE GAMEPLAY (FASE 8 - DINÁMICA DE JUEGO)
+
+### Problemas de Gameplay Identificados:
+1. ❌ **Juego Demasiado Pasivo** - El jugador no necesita moverse, solo esperar a que vengan enemigos
+2. ❌ **Rango de Ataque Muy Grande** - Ataque automático a 200px hace el juego automático
+3. ❌ **Mapa Muy Grande** - 1600x1200 hace que los enemigos tarden en llegar
+4. ❌ **Pocos Enemigos** - Solo 12 enemigos máximo no genera presión
+5. ❌ **Spawn Lento** - 1000ms mínimo entre spawns es muy tranquilo
+6. ❌ **Enemigos Lentos** - No persiguen activamente al jugador
+7. ❌ **Spawn Predecible** - Todos vienen del mismo lado, fácil huir en una dirección
+
+---
+
+### 36. **Reducción del Tamaño del Mapa** 🆕🎮
+```typescript
+// ANTES: Mapa muy grande, enemigos tardan en llegar
+MAP_WIDTH: 1600,
+MAP_HEIGHT: 1200,
+
+// DESPUÉS: Mapa más compacto para acción más intensa
+MAP_WIDTH: 1200,  // -25% tamaño
+MAP_HEIGHT: 900,  // -25% tamaño
+```
+
+**Impacto**: 
+- 🎮🎮🎮 Acción más concentrada y dinámica
+- ⚡⚡ Menos área para limpiar enemigos lejanos
+- 🎮 Encuentros más frecuentes con enemigos
+- ✅ El jugador necesita moverse estratégicamente
+
+---
+
+### 37. **Aumento de Spawn Rate (Más Agresivo)** 🆕🎮
+```typescript
+// ANTES: Spawn lento y predecible
+MIN_SPAWN_INTERVAL: 1000,  // 1 segundo mínimo
+SPAWN_INTERVAL_REDUCTION_PER_WAVE: 80,
+
+// DESPUÉS: Spawn rápido y constante
+MIN_SPAWN_INTERVAL: 600,  // -40% intervalo mínimo
+SPAWN_INTERVAL_REDUCTION_PER_WAVE: 100,  // +25% reducción por oleada
+```
+
+**Impacto**: 
+- 🎮🎮🎮 Presión constante de enemigos
+- ⚡ Mantiene el límite de enemigos activos más tiempo
+- 🎮 Jugador necesita priorizar objetivos
+- ✅ Gameplay más frenético y desafiante
+
+---
+
+### 38. **Aumento de Límite de Enemigos Activos** 🆕🎮
+```typescript
+// ANTES: Pocos enemigos en pantalla
+BASE_MAX_ACTIVE_ENEMIES: 8,
+MAX_ACTIVE_ENEMIES_INCREMENT: 1.5,
+MAX_ACTIVE_ENEMIES_CAP: 12,
+
+// DESPUÉS: Hordas más grandes
+BASE_MAX_ACTIVE_ENEMIES: 10,  // +25% base
+MAX_ACTIVE_ENEMIES_INCREMENT: 2,  // +33% incremento
+MAX_ACTIVE_ENEMIES_CAP: 18,  // +50% límite máximo
+```
+
+**Impacto**: 
+- 🎮🎮🎮 Hordas grandes que rodean al jugador
+- ⚡⚡ Optimización mantiene 60 FPS con 18 enemigos
+- 🎮 Necesidad de usar habilidades estratégicamente
+- ✅ El jugador DEBE moverse para sobrevivir
+
+---
+
+### 39. **Reducción de Rango de Ataque Automático** 🆕🎮
+```typescript
+// ANTES: Rango muy grande, juego pasivo
+ATTACK_RANGE: 200,
+
+// DESPUÉS: Rango corto, requiere acercarse
+ATTACK_RANGE: 120,  // -40% rango
+```
+
+**Impacto**: 
+- 🎮🎮🎮🎮🎮 CRÍTICO: Jugador debe acercarse a enemigos
+- 🎮🎮 Necesidad de movimiento constante
+- 🎮 Decisiones riesgo/recompensa más emocionantes
+- ✅ Gameplay activo en lugar de pasivo
+
+---
+
+### 40. **Aumento de Velocidad de Enemigos** 🆕🎮
+```typescript
+// ANTES: Enemigos lentos y fáciles de evitar
+BASE_MOVEMENT_SPEED: 120,
+NORMAL.SPEED: 0.85,
+FAST.SPEED: 1.6,
+TANK.SPEED: 0.45,
+
+// DESPUÉS: Enemigos más agresivos
+BASE_MOVEMENT_SPEED: 150,  // +25% velocidad base
+NORMAL.SPEED: 1.0,  // +18% velocidad
+FAST.SPEED: 1.8,  // +13% velocidad
+TANK.SPEED: 0.6,  // +33% velocidad
+```
+
+**Impacto**: 
+- 🎮🎮🎮 Enemigos persiguen activamente
+- 🎮 No se puede huir indefinidamente
+- 🎮 Enemigos rápidos son realmente peligrosos
+- ✅ Incluso tanks son amenazantes
+
+---
+
+### 41. **Sistema de Spawn Multi-Direccional** 🆕🎮🔥
+```typescript
+// ANTES: Spawn aleatorio en círculo, enemigos se agrupan
+const angle = Math.random() * Math.PI * 2;
+
+// DESPUÉS: 8 direcciones definidas con variación
+const spawnDirections = [
+  { name: 'arriba', angle: -Math.PI / 2 },
+  { name: 'abajo', angle: Math.PI / 2 },
+  { name: 'izquierda', angle: Math.PI },
+  { name: 'derecha', angle: 0 },
+  { name: 'arriba-izquierda', angle: -3 * Math.PI / 4 },
+  { name: 'arriba-derecha', angle: -Math.PI / 4 },
+  { name: 'abajo-izquierda', angle: 3 * Math.PI / 4 },
+  { name: 'abajo-derecha', angle: Math.PI / 4 }
+];
+
+const direction = spawnDirections[Math.floor(Math.random() * spawnDirections.length)]!;
+const angleVariation = (Math.random() - 0.5) * 0.4; // ±20° variación
+const angle = direction.angle + angleVariation;
+```
+
+**Impacto**: 
+- 🎮🎮🎮🎮🎮 CRÍTICO: Enemigos atacan por TODOS lados
+- 🎮🎮🎮 No hay "zona segura" donde escapar
+- 🎮 Patrones de spawn más balanceados
+- 🎮 Jugador debe estar alerta 360°
+- ✅ Eliminado el problema de "todos vienen del mismo lado"
+
+---
+
+## 📈 RESULTADOS ESPERADOS (FASE 8 - GAMEPLAY MEJORADO)
+
+### Mejoras de Jugabilidad:
+- 🎮🎮🎮🎮🎮 **Gameplay Activo**: Jugador DEBE moverse constantemente
+- 🎮🎮🎮🎮 **Hordas Amenazantes**: 18 enemigos atacando por todos lados
+- 🎮🎮🎮 **Uso de Habilidades**: Necesarias para sobrevivir hordas grandes
+- 🎮🎮 **Decisiones Tácticas**: ¿Atacar cuál enemigo? ¿Hacia dónde huir?
+- 🎮 **Riesgo/Recompensa**: Acercarse para atacar vs mantenerse seguro
+- ✅ **Entretenido**: Cambio de pasivo/aburrido a dinámico/emocionante
+
+### Rendimiento Mantenido:
+- ⚡⚡⚡ **60 FPS Constantes**: Incluso con 18 enemigos y mapa más pequeño
+- ⚡⚡ **Optimizaciones Previas Intactas**: Refs, batch processing, culling
+- ⚡ **Mapa Más Pequeño**: Menos área para renderizar
+- ✅ **Gameplay Y Rendimiento**: Balance perfecto
+
+### Comparación Antes/Después:
+
+#### ANTES (Gameplay Pasivo):
+- Jugador espera inmóvil ❌
+- Enemigos vienen lentamente ❌
+- Rango de ataque 200px (muy grande) ❌
+- 12 enemigos máximo (poco) ❌
+- Mapa 1600x1200 (muy grande) ❌
+- Spawn lento (1000ms mínimo) ❌
+- Todos vienen del mismo lado ❌
+
+#### DESPUÉS (Gameplay Dinámico):
+- Jugador debe moverse constantemente ✅
+- Enemigos persiguen agresivamente ✅
+- Rango de ataque 120px (requiere acercarse) ✅
+- 18 enemigos máximo (hordas) ✅
+- Mapa 1200x900 (acción concentrada) ✅
+- Spawn rápido (600ms mínimo) ✅
+- Enemigos vienen de 8 direcciones ✅
+
+---
+
 **Fecha**: 13 de Noviembre de 2025
 **Estado**: ✅✅✅ Optimizaciones CRÍTICAS Aplicadas - Fase 7 FINAL 🔥
 **Rendimiento**: ÓPTIMO - 60 FPS Constantes ⚡✨

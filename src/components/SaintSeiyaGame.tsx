@@ -588,9 +588,25 @@ const SaintSeiyaGame: React.FC = () => {
         type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
       }
       
-      // Spawn en un ANILLO alrededor del jugador
+      // SISTEMA DE SPAWN MULTI-DIRECCIONAL: Enemigos vienen de 8 direcciones diferentes
+      // para evitar que todos sigan la misma ruta y crear patrones de ataque variados
+      const spawnDirections = [
+        { name: 'arriba', angle: -Math.PI / 2 },
+        { name: 'abajo', angle: Math.PI / 2 },
+        { name: 'izquierda', angle: Math.PI },
+        { name: 'derecha', angle: 0 },
+        { name: 'arriba-izquierda', angle: -3 * Math.PI / 4 },
+        { name: 'arriba-derecha', angle: -Math.PI / 4 },
+        { name: 'abajo-izquierda', angle: 3 * Math.PI / 4 },
+        { name: 'abajo-derecha', angle: Math.PI / 4 }
+      ];
+      
+      // Seleccionar dirección aleatoria con variación
+      const direction = spawnDirections[Math.floor(Math.random() * spawnDirections.length)]!;
+      const angleVariation = (Math.random() - 0.5) * 0.4; // ±20° de variación
+      const angle = direction.angle + angleVariation;
+      
       const spawnDistance = ENEMY_CONFIG.SPAWN_DISTANCE_MIN + Math.random() * (ENEMY_CONFIG.SPAWN_DISTANCE_MAX - ENEMY_CONFIG.SPAWN_DISTANCE_MIN);
-      const angle = Math.random() * Math.PI * 2;
       
       let x = currentPlayer.x + Math.cos(angle) * spawnDistance;
       let y = currentPlayer.y + Math.sin(angle) * spawnDistance;
