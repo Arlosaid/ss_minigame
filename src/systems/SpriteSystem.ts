@@ -135,15 +135,15 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
     // Cargar frames de idle
     console.log('Loading idle frames...');
     const idleFrames = await SpriteManager.loadMultiple([
-      '/sprites/player_idle.png'
+      '/sprites/player/player_idle.png'
     ]);
     console.log('Idle frames loaded:', idleFrames.length);
 
     // Cargar frames de caminar (solo 2 frames)
     console.log('Loading walk frames...');
     const walkPaths = [
-      '/sprites/player_walk_1.png',
-      '/sprites/player_walk_2.png'
+      '/sprites/player/player_walk_1.png',
+      '/sprites/player/player_walk_2.png'
     ];
     
     // Cargar walk frames con fallback
@@ -161,10 +161,10 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
     // Cargar frames de ataque
     console.log('Loading attack frames...');
     const attackFrames = await SpriteManager.loadMultiple([
-      '/sprites/player_attack_1.png',
-      '/sprites/player_attack_2.png',
-      '/sprites/player_attack_3.png',
-      '/sprites/player_attack_4.png'
+      '/sprites/player/player_attack_1.png',
+      '/sprites/player/player_attack_2.png',
+      '/sprites/player/player_attack_3.png',
+      '/sprites/player/player_attack_4.png'
     ]);
     console.log('Attack frames loaded:', attackFrames.length);
 
@@ -203,7 +203,7 @@ export async function createEnemySprite(_type?: string): Promise<AnimatedSprite>
   try {
     // Por ahora usar los mismos sprites, pero podrías cargar diferentes según el tipo
     const frames = await SpriteManager.loadMultiple([
-      '/sprites/player_idle.png'
+      '/sprites/player/player_idle.png'
     ]);
 
     sprite.addAnimation('idle', {

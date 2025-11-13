@@ -87,9 +87,11 @@ export class WaveSystem {
       y: this.arenaHeight / 2
     };
 
-    // Spawn en los bordes de la arena
-    const spawnRadius = Math.max(this.arenaWidth, this.arenaHeight) * 0.6;
-    return PhysicsSystem.randomPointOnCircle(center, spawnRadius);
+    // Spawn en posiciones aleatorias alrededor del centro
+    const minRadius = Math.max(this.arenaWidth, this.arenaHeight) * 0.3;
+    const maxRadius = Math.max(this.arenaWidth, this.arenaHeight) * 0.7;
+    const randomRadius = minRadius + Math.random() * (maxRadius - minRadius);
+    return PhysicsSystem.randomPointOnCircle(center, randomRadius);
   }
 
   private getWaveConfig(wave: number): WaveConfig {
@@ -98,7 +100,7 @@ export class WaveSystem {
     const enemyCount = baseCount + Math.floor(wave * countIncrement);
 
     const difficultyMultiplier = 1 + (wave - 1) * 0.15;
-    const spawnDelay = Math.max(0.3, 1.5 - wave * 0.05);
+    const spawnDelay = Math.max(0.2, 0.8 - wave * 0.03);
 
     // Configurar tipos de enemigos según la wave
     let enemyTypes: { type: EnemyType; weight: number }[] = [

@@ -4,10 +4,10 @@ import { BRONZE_KNIGHTS, GOLD_SAINTS, UPGRADES } from '../data/gameData';
 import { createPlayerSprite, AnimatedSprite } from '../systems/SpriteSystem';
 import { CombatSystem } from '../core/Combat';
 
-const WIDTH = 1200; // Tamaño del viewport (lo que se ve en pantalla)
-const HEIGHT = 800;
-const MAP_WIDTH = 2400; // Tamaño del mapa (el doble del viewport)
-const MAP_HEIGHT = 1600;
+const WIDTH = 800; // Tamaño del viewport (lo que se ve en pantalla)
+const HEIGHT = 600;
+const MAP_WIDTH = 1600; // Mapa más grande para un templo espacioso
+const MAP_HEIGHT = 1200;
 
 interface Player {
   x: number;
@@ -62,6 +62,15 @@ interface ExpOrb {
   value: number;
 }
 
+interface SpawnWarning {
+  id: number;
+  x: number;
+  y: number;
+  type: 'normal' | 'fast' | 'tank';
+  spawnTime: number;
+  warningDuration: number;
+}
+
 interface PlayerUpgrades {
   damage: number;
   speed: number;
@@ -78,6 +87,7 @@ const SaintSeiyaGame: React.FC = () => {
   const [boss, setBoss] = useState<Boss | null>(null);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [expOrbs, setExpOrbs] = useState<ExpOrb[]>([]);
+  const [spawnWarnings, setSpawnWarnings] = useState<SpawnWarning[]>([]);
   const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set());
   const [score, setScore] = useState(0);
   const [lastShot, setLastShot] = useState(0);
@@ -97,18 +107,23 @@ const SaintSeiyaGame: React.FC = () => {
   const [playerSprite, setPlayerSprite] = useState<AnimatedSprite | null>(null);
   const [isAttacking, setIsAttacking] = useState(false);
   const [projectileImage, setProjectileImage] = useState<HTMLImageElement | null>(null);
+  const [floorImage, setFloorImage] = useState<HTMLImageElement | null>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
   const nextProjectileId = useRef(0);
   const nextOrbId = useRef(0);
+  const nextWarningId = useRef(0);
   const lastFrameTime = useRef<number>(Date.now());
 
   const selectKnight = async (knight: Knight) => {
+    const initialX = MAP_WIDTH / 2;
+    const initialY = MAP_HEIGHT / 2;
+    
     setPlayer({
-      x: MAP_WIDTH / 2,
-      y: MAP_HEIGHT / 2,
+      x: initialX,
+      y: initialY,
       knight,
       health: 100,
       maxHealth: 100,
@@ -116,6 +131,7 @@ const SaintSeiyaGame: React.FC = () => {
       expToNext: 100,
       level: 1
     });
+    
     setGameStarted(true);
     setCurrentHouse(0);
     setWaveEnemies(20);
@@ -137,7 +153,18 @@ const SaintSeiyaGame: React.FC = () => {
       projImg.onerror = () => {
         console.error('Failed to load projectile sprite');
       };
-      projImg.src = '/sprites/attack_1.png';
+      projImg.src = '/sprites/attacks/attack_1.png';
+      
+      // Cargar imagen del floor
+      const floorImg = new Image();
+      floorImg.onload = () => {
+        setFloorImage(floorImg);
+        console.log('Floor image loaded');
+      };
+      floorImg.onerror = () => {
+        console.error('Failed to load floor image');
+      };
+      floorImg.src = '/sprites/stages/floor_1_stage.png';
     } catch (error) {
       console.error('Failed to load player sprite:', error);
     }
@@ -147,25 +174,20 @@ const SaintSeiyaGame: React.FC = () => {
     const types: Array<'normal' | 'fast' | 'tank'> = ['normal', 'fast', 'tank'];
     const type = types[Math.floor(Math.random() * types.length)]!;
     
-    const side = Math.floor(Math.random() * 4);
-    let x = 0, y = 0;
-    
-    if (side === 0) { x = Math.random() * MAP_WIDTH; y = -20; }
-    else if (side === 1) { x = MAP_WIDTH + 20; y = Math.random() * MAP_HEIGHT; }
-    else if (side === 2) { x = Math.random() * MAP_WIDTH; y = MAP_HEIGHT + 20; }
-    else { x = -20; y = Math.random() * MAP_HEIGHT; }
+    // Spawn en posiciones completamente aleatorias dentro del mapa
+    const x = Math.random() * MAP_WIDTH;
+    const y = Math.random() * MAP_HEIGHT;
 
-    const enemy: Enemy = {
-      id: nextEnemyId.current++,
+    // Crear advertencia de spawn en lugar de enemigo directo
+    const warning: SpawnWarning = {
+      id: nextWarningId.current++,
       x, y,
-      health: type === 'tank' ? 30 : type === 'fast' ? 15 : 20,
-      maxHealth: type === 'tank' ? 30 : type === 'fast' ? 15 : 20,
-      speed: type === 'fast' ? 2 : type === 'tank' ? 0.8 : 1.2,
       type,
-      angle: 0
+      spawnTime: Date.now() + 1500, // Spawn después de 1.5 segundos
+      warningDuration: 1500
     };
     
-    setEnemies(prev => [...prev, enemy]);
+    setSpawnWarnings(prev => [...prev, warning]);
   }, []);
 
   const spawnBoss = useCallback(() => {
@@ -313,10 +335,17 @@ const SaintSeiyaGame: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevenir comportamiento por defecto de las flechas
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
       setKeysPressed(prev => new Set(prev).add(e.key.toLowerCase()));
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+      }
       setKeysPressed(prev => {
         const newSet = new Set(prev);
         newSet.delete(e.key.toLowerCase());
@@ -336,17 +365,18 @@ const SaintSeiyaGame: React.FC = () => {
   useEffect(() => {
     if (!gameStarted || !player || gameState !== 'playing') return;
     
-    const spawnInterval = Math.max(300, 1000 - (waveKills * 20)); // Empieza en 300ms, aumenta conforme avanzas
+    const spawnInterval = Math.max(100, 300 - (waveKills * 5)); // Spawn mucho más rápido
     
     const interval = setInterval(() => {
       if (boss) return;
-      if (enemies.length < 25 && waveKills < waveEnemies) {
+      // Permitir más enemigos y advertencias combinados
+      if ((enemies.length + spawnWarnings.length) < 80 && waveKills < waveEnemies) {
         spawnEnemy();
       }
     }, spawnInterval);
     
     return () => clearInterval(interval);
-  }, [gameStarted, player, gameState, boss, enemies.length, waveKills, waveEnemies, spawnEnemy]);
+  }, [gameStarted, player, gameState, boss, enemies.length, spawnWarnings.length, waveKills, waveEnemies, spawnEnemy]);
 
   useEffect(() => {
     if (!gameStarted || !player || gameState !== 'playing') return;
@@ -361,8 +391,10 @@ const SaintSeiyaGame: React.FC = () => {
       const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Limitar a 100ms máximo
       lastTime = currentTime;
       
-      // Velocidad en píxeles por segundo
-      const pixelsPerSecond = (player.knight.speed + upgrades.speed * 0.5) * 80;
+      // Velocidad base en píxeles por segundo (aumentada significativamente)
+      const baseSpeed = 400; // Velocidad base mucho más rápida
+      const speedMultiplier = player.knight.speed + upgrades.speed * 0.5;
+      const pixelsPerSecond = baseSpeed * speedMultiplier;
       
       // Leer input y construir vector de dirección
       let dx = 0, dy = 0;
@@ -371,23 +403,19 @@ const SaintSeiyaGame: React.FC = () => {
       if (keysPressed.has('a') || keysPressed.has('arrowleft')) dx -= 1;
       if (keysPressed.has('d') || keysPressed.has('arrowright')) dx += 1;
       
-      // Normalizar vector para mantener velocidad constante en diagonales
+      // Actualizar posición si hay movimiento
       if (dx !== 0 || dy !== 0) {
         const magnitude = Math.hypot(dx, dy);
         const normalizedDx = (dx / magnitude) * pixelsPerSecond * deltaTime;
         const normalizedDy = (dy / magnitude) * pixelsPerSecond * deltaTime;
         
+        // Calcular nueva posición con límites
+        const newX = Math.max(20, Math.min(MAP_WIDTH - 20, player.x + normalizedDx));
+        const newY = Math.max(20, Math.min(MAP_HEIGHT - 20, player.y + normalizedDy));
+        
+        // Actualizar posición del jugador y cámara juntos
         setPlayer(prev => {
           if (!prev) return prev;
-          const newX = Math.max(20, Math.min(MAP_WIDTH - 20, prev.x + normalizedDx));
-          const newY = Math.max(20, Math.min(MAP_HEIGHT - 20, prev.y + normalizedDy));
-          
-          // Actualizar cámara para seguir al jugador
-          setCamera({
-            x: Math.max(0, Math.min(MAP_WIDTH - WIDTH, newX - WIDTH / 2)),
-            y: Math.max(0, Math.min(MAP_HEIGHT - HEIGHT, newY - HEIGHT / 2))
-          });
-          
           return {
             ...prev,
             x: newX,
@@ -396,7 +424,40 @@ const SaintSeiyaGame: React.FC = () => {
         });
       }
       
+      // Actualizar cámara para seguir al jugador suavemente
+      setCamera({
+        x: Math.max(0, Math.min(MAP_WIDTH - WIDTH, player.x - WIDTH / 2)),
+        y: Math.max(0, Math.min(MAP_HEIGHT - HEIGHT, player.y - HEIGHT / 2))
+      });
+      
       shoot();
+      
+      // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
+      const now = Date.now();
+      setSpawnWarnings(prev => {
+        const remaining: SpawnWarning[] = [];
+        
+        prev.forEach(warning => {
+          if (now >= warning.spawnTime) {
+            // Crear el enemigo
+            const enemy: Enemy = {
+              id: nextEnemyId.current++,
+              x: warning.x,
+              y: warning.y,
+              health: warning.type === 'tank' ? 30 : warning.type === 'fast' ? 15 : 20,
+              maxHealth: warning.type === 'tank' ? 30 : warning.type === 'fast' ? 15 : 20,
+              speed: warning.type === 'fast' ? 1.1 : warning.type === 'tank' ? 0.4 : 0.65,
+              type: warning.type,
+              angle: 0
+            };
+            setEnemies(e => [...e, enemy]);
+          } else {
+            remaining.push(warning);
+          }
+        });
+        
+        return remaining;
+      });
       
       setProjectiles(prev => prev
         .map(p => ({ ...p, x: p.x + p.dx, y: p.y + p.dy }))
@@ -662,28 +723,76 @@ const SaintSeiyaGame: React.FC = () => {
         // Aplicar transformación de cámara
         ctx.translate(-camera.x, -camera.y);
         
-        // Dibujar fondo del mapa
-        ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-        
-        // Dibujar grid para visualizar el mapa
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.lineWidth = 1;
-        for (let x = 0; x < MAP_WIDTH; x += 100) {
-          ctx.beginPath();
-          ctx.moveTo(x, 0);
-          ctx.lineTo(x, MAP_HEIGHT);
-          ctx.stroke();
-        }
-        for (let y = 0; y < MAP_HEIGHT; y += 100) {
-          ctx.beginPath();
-          ctx.moveTo(0, y);
-          ctx.lineTo(MAP_WIDTH, y);
-          ctx.stroke();
+        // Dibujar fondo del mapa con imagen repetida en su tamaño original
+        if (floorImage && floorImage.complete) {
+          ctx.imageSmoothingEnabled = false;
+          
+          // Calcular cuántas veces necesitamos repetir la imagen
+          const imgWidth = floorImage.width;
+          const imgHeight = floorImage.height;
+          
+          // Dibujar la imagen repetida manualmente
+          for (let x = 0; x < MAP_WIDTH; x += imgWidth) {
+            for (let y = 0; y < MAP_HEIGHT; y += imgHeight) {
+              ctx.drawImage(floorImage, x, y);
+            }
+          }
+        } else {
+          // Fallback: color sólido oscuro
+          ctx.fillStyle = '#1a1a2e';
+          ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
         }
         
         // Actualizar efectos de ataque
         CombatSystem.updateAttackEffects();
+        
+        // Dibujar spawn warnings (advertencias de spawn)
+        const currentTime = Date.now();
+        spawnWarnings.forEach(warning => {
+          const timeLeft = warning.spawnTime - currentTime;
+          const progress = 1 - (timeLeft / warning.warningDuration);
+          
+          // Círculo pulsante que crece
+          const pulseSize = 15 + Math.sin(currentTime / 100) * 5;
+          const alpha = 0.3 + Math.sin(currentTime / 150) * 0.2;
+          
+          // Color según tipo de enemigo
+          let warningColor = '#FF0000';
+          if (warning.type === 'fast') warningColor = '#FF00FF';
+          if (warning.type === 'tank') warningColor = '#888888';
+          
+          // Círculo exterior pulsante
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = warningColor;
+          ctx.beginPath();
+          ctx.arc(warning.x, warning.y, pulseSize * (1 + progress * 0.5), 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Círculo interior más sólido
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = warningColor;
+          ctx.beginPath();
+          ctx.arc(warning.x, warning.y, 8, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Anillo de advertencia
+          ctx.globalAlpha = 0.8;
+          ctx.strokeStyle = warningColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(warning.x, warning.y, 20 - progress * 5, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Símbolo de alerta (!)
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 16px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('!', warning.x, warning.y);
+          
+          ctx.globalAlpha = 1;
+        });
         
         // Dibujar jugador con sprite o fallback
         if (playerSprite) {
@@ -726,7 +835,7 @@ const SaintSeiyaGame: React.FC = () => {
         
         projectiles.forEach(proj => {
           // Si hay sprite de proyectil y es del jugador, usarlo
-          if (projectileImage && !proj.isEnemy) {
+          if (projectileImage && projectileImage.complete && !proj.isEnemy) {
             ctx.save();
             ctx.imageSmoothingEnabled = false;
             
@@ -736,25 +845,19 @@ const SaintSeiyaGame: React.FC = () => {
             // Rotar según el ángulo del proyectil
             ctx.rotate(proj.angle);
             
-            // Tamaño más grande para el proyectil
-            const size = 32;
+            // Tamaño del proyectil en pantalla
+            const displaySize = 24;
             
-            // Recortar el borde amarillo del sprite
-            const cropMargin = 14; // Recortar 14px de cada lado para eliminar completamente el borde
-            const originalSize = 64;
-            const cropSize = originalSize - (cropMargin * 2); // 36px del centro
-            
-            // Dibujar centrado en el origen (después de translate)
+            // Dibujar la imagen completa sin recortar
             ctx.drawImage(
               projectileImage,
-              cropMargin, cropMargin, // Inicio del recorte
-              cropSize, cropSize, // Tamaño del recorte
-              -size/2, -size/2, // Posición (centrado)
-              size, size // Tamaño en canvas
+              -displaySize/2, -displaySize/2, // Posición (centrado)
+              displaySize, displaySize // Tamaño en canvas
             );
             
             ctx.restore();
           } else {
+            // Fallback para proyectiles enemigos o si no carga la imagen
             ctx.fillStyle = proj.color;
             ctx.beginPath();
             ctx.arc(proj.x, proj.y, 4, 0, Math.PI * 2);
@@ -805,7 +908,7 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [player, enemies, boss, projectiles, expOrbs, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, camera]);
+  }, [player, enemies, boss, projectiles, expOrbs, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera]);
 
   if (!gameStarted) {
     return (

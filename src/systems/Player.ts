@@ -50,7 +50,7 @@ export class Player {
     this.level = state.level;
     
     // Velocidad base en píxeles por segundo
-    this.speed = 200;
+    this.speed = 300;
     this.direction = { x: 0, y: 0 };
     this.isMoving = false;
     this.sprite = null;
