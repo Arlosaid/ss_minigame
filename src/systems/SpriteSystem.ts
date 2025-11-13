@@ -135,13 +135,13 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
   try {
     // Cargar frames de idle
     const idleFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/seiya/player_idle.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_idle.png`
     ]);
 
     // Cargar frames de caminar (solo 2 frames)
     const walkPaths = [
-      '/sprites/player/seiya/player_walk_1.png',
-      '/sprites/player/seiya/player_walk_2.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_walk_1.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_walk_2.png`
     ];
     
     // Cargar walk frames con fallback
@@ -157,10 +157,10 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
 
     // Cargar frames de ataque
     const attackFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/seiya/player_attack_1.png',
-      '/sprites/player/seiya/player_attack_2.png',
-      '/sprites/player/seiya/player_attack_3.png',
-      '/sprites/player/seiya/player_attack_4.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_1.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_2.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_3.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_4.png`
     ]);
 
     // Agregar animaciones
@@ -197,9 +197,9 @@ export async function createEnemySprite(_type?: string): Promise<AnimatedSprite>
   try {
     // Cargar frames de caminar del enemigo (animación loop)
     const walkFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/enemy_1/enemy_walk_2.png',
-      '/sprites/player/enemy_1/enemy_walk_3.png',
-      '/sprites/player/enemy_1/enemy_walk_4.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/enemy_1/enemy_walk_2.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/enemy_1/enemy_walk_3.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/enemy_1/enemy_walk_4.png`
     ]);
 
     sprite.addAnimation('walk', {
@@ -222,24 +222,24 @@ export async function createBossSprite(): Promise<AnimatedSprite> {
   try {
     // Cargar frames de idle/walk del boss
     const idleFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/boss/boss_walk_1.png',
-      '/sprites/player/boss/boss_walk_2.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`
     ]);
 
     // Cargar frames de caminar (animación completa)
     const walkFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/boss/boss_walk_1.png',
-      '/sprites/player/boss/boss_walk_2.png',
-      '/sprites/player/boss/boss_walk_3.png',
-      '/sprites/player/boss/boss_walk_4.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_3.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_4.png`
     ]);
 
     // Cargar frames de ataque (usar walk frames como animación de ataque)
     const attackFrames = await SpriteManager.loadMultiple([
-      '/sprites/player/boss/boss_walk_3.png',
-      '/sprites/player/boss/boss_walk_4.png',
-      '/sprites/player/boss/boss_walk_1.png',
-      '/sprites/player/boss/boss_walk_2.png'
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_3.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_4.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`
     ]);
 
     // Agregar animaciones

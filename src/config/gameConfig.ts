@@ -233,20 +233,20 @@ export const POWER_CONFIG = {
   // 🏹 Flecha de Oro (Golden Arrow)
   GOLDEN_ARROW_BASE_DAMAGE: 40, // Daño base de la flecha (nivel 1)
   GOLDEN_ARROW_DAMAGE_INCREMENT: 15, // Incremento de daño por nivel
-  GOLDEN_ARROW_SPEED: 800, // Velocidad de la flecha (px/segundo)
-  GOLDEN_ARROW_RANGE: 400, // Rango máximo de búsqueda de enemigos
-  GOLDEN_ARROW_LIFETIME: 2000, // Duración máxima de la flecha (ms)
+  GOLDEN_ARROW_BASE_SPEED: 400, // Velocidad base de la flecha (px/segundo) - nivel 1
+  GOLDEN_ARROW_SPEED_INCREMENT: 100, // Incremento de velocidad por nivel
+  GOLDEN_ARROW_RANGE: 500, // Rango máximo de búsqueda de enemigos
+  GOLDEN_ARROW_LIFETIME: 3000, // Duración máxima de la flecha (ms)
   GOLDEN_ARROW_SIZE: 32, // Tamaño visual de la flecha
   GOLDEN_ARROW_TRAIL_LENGTH: 5, // Longitud del trail dorado
+  GOLDEN_ARROW_FIRE_RATE: 1200, // Intervalo de disparo automático (ms) - ritmo normal
   
   // 🛡️ Escudo de Atena (Athena's Shield)
-  SHIELD_BASE_DURATION: 2000, // Duración base del escudo (ms) - nivel 1
-  SHIELD_DURATION_INCREMENT: 500, // Incremento de duración por nivel
-  SHIELD_BASE_ABSORPTION: 30, // Daño absorbido base (nivel 1)
-  SHIELD_ABSORPTION_INCREMENT: 15, // Incremento de absorción por nivel
-  SHIELD_RADIUS: 60, // Radio visual del escudo
-  SHIELD_ROTATION_SPEED: 2, // Velocidad de rotación del escudo (rad/segundo)
-  SHIELD_REFLECT_DAMAGE_MULTIPLIER: 0.5, // Porcentaje de daño reflejado (50%)
+  SHIELD_BASE_ABSORPTION: 50, // Daño absorbido por escudo individual
+  SHIELD_RADIUS: 70, // Radio de órbita de los escudos
+  SHIELD_ROTATION_SPEED: 3, // Velocidad de rotación de los escudos (rad/segundo)
+  SHIELD_REGENERATION_TIME: 15000, // Tiempo de regeneración de escudos (15 segundos)
+  SHIELD_SIZE: 40, // Tamaño visual de cada escudo
 } as const;
 
 // ============================================

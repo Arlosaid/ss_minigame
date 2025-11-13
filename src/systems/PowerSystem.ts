@@ -31,8 +31,9 @@ export interface ActiveShield {
   absorption: number;
   maxAbsorption: number;
   createdAt: number;
-  duration: number;
   rotation: number;
+  angle: number; // Ángulo de posición del escudo en la órbita
+  isActive: boolean; // Si el escudo está activo o destruido
 }
 
 interface LightningBolt {
@@ -57,7 +58,7 @@ export class PowerSystem {
   private static nextShieldId = 0;
 
   /**
-   * ⚡ RAYO DE ZEUS ⚡ (Zeus's Lightning)
+   * RAYO DE ZEUS (Zeus's Lightning)
    * Invoca truenos divinos que caen en círculo alrededor del jugador,
    * priorizando inteligentemente las zonas donde hay más enemigos
    * 
@@ -65,13 +66,13 @@ export class PowerSystem {
    * Nivel 2: 2 rayos alrededor, 2.5s, 30 daño  
    * Nivel 3: 3 rayos en círculo, 2s, 35 daño
    * Nivel 4: 4 rayos en círculo amplio, 1.5s, 40 daño
-   * Nivel 5: 5 rayos cubriendo área, 1s, 45 daño ⚡✨
+   * Nivel 5: 5 rayos cubriendo área, 1s, 45 daño
    */
   static triggerLightningStrike(
     playerX: number,
     playerY: number,
-    directionX: number,
-    directionY: number,
+    _directionX: number,
+    _directionY: number,
     level: number,
     enemies: Array<{ id: number; x: number; y: number; health: number }>,
     onDamage: (enemyId: number, damage: number) => void
@@ -264,147 +265,127 @@ export class PowerSystem {
 
   /**
    * 🏹 FLECHA DE ORO 🏹 (Golden Arrow)
-   * Dispara flechas doradas que buscan automáticamente al enemigo más cercano
+   * Dispara una flecha dorada automáticamente hacia el enemigo más cercano
+   * La velocidad y el daño aumentan con el nivel
    * 
-   * Nivel 1: 1 flecha, 40 daño, 4s cooldown
-   * Nivel 2: 2 flechas, 55 daño, 3.5s cooldown
-   * Nivel 3: 3 flechas, 70 daño, 3s cooldown
-   * Nivel 4: 4 flechas, 85 daño, 2.5s cooldown
-   * Nivel 5: 5 flechas, 100 daño, 2s cooldown 🏹✨
+   * Nivel 1: 40 daño, 400 px/s, disparo cada 1.2s
+   * Nivel 2: 55 daño, 500 px/s, disparo cada 1.2s
+   * Nivel 3: 70 daño, 600 px/s, disparo cada 1.2s
+   * Nivel 4: 85 daño, 700 px/s, disparo cada 1.2s
+   * Nivel 5: 100 daño, 800 px/s, disparo cada 1.2s 🏹✨
    */
   static triggerGoldenArrow(
     playerX: number,
     playerY: number,
     level: number,
     enemies: Array<{ id: number; x: number; y: number; health: number }>,
-    onDamage: (enemyId: number, damage: number) => void
+    _onDamage: (enemyId: number, damage: number) => void
   ): void {
     const config = this.getGoldenArrowConfig(level);
-    const arrowCount = config.count;
     const damage = config.damage;
+    const speed = config.speed;
     
-    // Encontrar enemigos cercanos
-    const nearbyEnemies = enemies
+    // Encontrar el enemigo más cercano
+    const nearestEnemy = enemies
       .map(enemy => ({
         ...enemy,
         distance: Math.hypot(enemy.x - playerX, enemy.y - playerY)
       }))
       .filter(enemy => enemy.distance <= POWER_CONFIG.GOLDEN_ARROW_RANGE)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, arrowCount);
+      .sort((a, b) => a.distance - b.distance)[0];
     
-    // Si no hay enemigos, disparar en direcciones cardinales
-    if (nearbyEnemies.length === 0) {
-      const angles = [0, Math.PI / 2, Math.PI, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4];
-      
-      for (let i = 0; i < arrowCount; i++) {
-        const angle = angles[i % angles.length]!;
-        const speed = POWER_CONFIG.GOLDEN_ARROW_SPEED;
-        
-        this.goldenArrows.push({
-          id: this.nextArrowId++,
-          x: playerX,
-          y: playerY,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          damage,
-          createdAt: Date.now(),
-          lifetime: POWER_CONFIG.GOLDEN_ARROW_LIFETIME
-        });
-      }
-      return;
-    }
-    
-    // Disparar flechas hacia enemigos cercanos
-    nearbyEnemies.forEach(enemy => {
-      const dx = enemy.x - playerX;
-      const dy = enemy.y - playerY;
-      const distance = Math.hypot(dx, dy);
-      const speed = POWER_CONFIG.GOLDEN_ARROW_SPEED;
+    // Si no hay enemigos, disparar hacia adelante
+    if (!nearestEnemy) {
+      const angle = 0; // Dirección derecha por defecto
       
       this.goldenArrows.push({
         id: this.nextArrowId++,
         x: playerX,
         y: playerY,
-        vx: (dx / distance) * speed,
-        vy: (dy / distance) * speed,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
         damage,
         createdAt: Date.now(),
-        lifetime: POWER_CONFIG.GOLDEN_ARROW_LIFETIME,
-        targetId: enemy.id
+        lifetime: POWER_CONFIG.GOLDEN_ARROW_LIFETIME
       });
+      return;
+    }
+    
+    // Disparar flecha hacia el enemigo más cercano
+    const dx = nearestEnemy.x - playerX;
+    const dy = nearestEnemy.y - playerY;
+    const distance = Math.hypot(dx, dy);
+    
+    this.goldenArrows.push({
+      id: this.nextArrowId++,
+      x: playerX,
+      y: playerY,
+      vx: (dx / distance) * speed,
+      vy: (dy / distance) * speed,
+      damage,
+      createdAt: Date.now(),
+      lifetime: POWER_CONFIG.GOLDEN_ARROW_LIFETIME,
+      targetId: nearestEnemy.id
     });
   }
 
   /**
    * Obtener configuración de la Flecha de Oro según nivel
    */
-  private static getGoldenArrowConfig(level: number): { count: number; damage: number; cooldown: number } {
+  private static getGoldenArrowConfig(level: number): { damage: number; speed: number; cooldown: number } {
     const baseDamage = POWER_CONFIG.GOLDEN_ARROW_BASE_DAMAGE;
     const damageIncrement = POWER_CONFIG.GOLDEN_ARROW_DAMAGE_INCREMENT;
+    const baseSpeed = POWER_CONFIG.GOLDEN_ARROW_BASE_SPEED;
+    const speedIncrement = POWER_CONFIG.GOLDEN_ARROW_SPEED_INCREMENT;
+    const fireRate = POWER_CONFIG.GOLDEN_ARROW_FIRE_RATE;
     
-    const configs = [
-      { count: 1, damage: baseDamage, cooldown: 4000 },                          // Nivel 1
-      { count: 2, damage: baseDamage + damageIncrement, cooldown: 3500 },        // Nivel 2
-      { count: 3, damage: baseDamage + damageIncrement * 2, cooldown: 3000 },    // Nivel 3
-      { count: 4, damage: baseDamage + damageIncrement * 3, cooldown: 2500 },    // Nivel 4
-      { count: 5, damage: baseDamage + damageIncrement * 4, cooldown: 2000 }     // Nivel 5
-    ];
+    const damage = baseDamage + (level - 1) * damageIncrement;
+    const speed = baseSpeed + (level - 1) * speedIncrement;
     
-    return configs[Math.min(level, 5) - 1] || configs[0]!;
+    return {
+      damage,
+      speed,
+      cooldown: fireRate
+    };
   }
 
   /**
-   * 🛡️ ESCUDO DE ATENA 🛡️ (Athena's Shield)
-   * Crea un escudo protector que absorbe daño y lo refleja a los enemigos cercanos
+   * ESCUDO DE ATENA (Athena's Shield)
+   * Crea escudos protectores que orbitan alrededor del jugador
+   * Cada escudo absorbe daño de proyectiles y se regenera cada 15 segundos
    * 
-   * Nivel 1: 30 absorción, 2s duración, 5s cooldown
-   * Nivel 2: 45 absorción, 2.5s duración, 4.5s cooldown
-   * Nivel 3: 60 absorción, 3s duración, 4s cooldown
-   * Nivel 4: 75 absorción, 3.5s duración, 3.5s cooldown
-   * Nivel 5: 90 absorción, 4s duración, 3s cooldown 🛡️✨
+   * Nivel 1: 1 escudo, 50 absorción cada uno
+   * Nivel 2: 2 escudos, 50 absorción cada uno
+   * Nivel 3: 3 escudos, 50 absorción cada uno
+   * Nivel 4: 4 escudos, 50 absorción cada uno
+   * Nivel 5: 5 escudos, 50 absorción cada uno
    */
   static triggerAthenaShield(
-    playerX: number,
-    playerY: number,
+    _playerX: number,
+    _playerY: number,
     playerId: string,
     level: number
   ): void {
-    const config = this.getShieldConfig(level);
+    // Solo crear escudos si no existen para este jugador
+    const existingShields = this.activeShields.filter(s => s.playerId === playerId);
     
-    // Remover escudo anterior si existe
-    this.activeShields = this.activeShields.filter(shield => shield.playerId !== playerId);
-    
-    // Crear nuevo escudo
-    this.activeShields.push({
-      id: this.nextShieldId++,
-      playerId,
-      absorption: config.absorption,
-      maxAbsorption: config.absorption,
-      createdAt: Date.now(),
-      duration: config.duration,
-      rotation: 0
-    });
-  }
-
-  /**
-   * Obtener configuración del Escudo de Atena según nivel
-   */
-  private static getShieldConfig(level: number): { absorption: number; duration: number; cooldown: number } {
-    const baseAbsorption = POWER_CONFIG.SHIELD_BASE_ABSORPTION;
-    const absorptionIncrement = POWER_CONFIG.SHIELD_ABSORPTION_INCREMENT;
-    const baseDuration = POWER_CONFIG.SHIELD_BASE_DURATION;
-    const durationIncrement = POWER_CONFIG.SHIELD_DURATION_INCREMENT;
-    
-    const configs = [
-      { absorption: baseAbsorption, duration: baseDuration, cooldown: 5000 },                                          // Nivel 1
-      { absorption: baseAbsorption + absorptionIncrement, duration: baseDuration + durationIncrement, cooldown: 4500 },        // Nivel 2
-      { absorption: baseAbsorption + absorptionIncrement * 2, duration: baseDuration + durationIncrement * 2, cooldown: 4000 },    // Nivel 3
-      { absorption: baseAbsorption + absorptionIncrement * 3, duration: baseDuration + durationIncrement * 3, cooldown: 3500 },    // Nivel 4
-      { absorption: baseAbsorption + absorptionIncrement * 4, duration: baseDuration + durationIncrement * 4, cooldown: 3000 }     // Nivel 5
-    ];
-    
-    return configs[Math.min(level, 5) - 1] || configs[0]!;
+    if (existingShields.length === 0) {
+      // Crear escudos iniciales según el nivel
+      const numShields = level;
+      for (let i = 0; i < numShields; i++) {
+        const angle = (i / numShields) * Math.PI * 2;
+        this.activeShields.push({
+          id: this.nextShieldId++,
+          playerId,
+          absorption: POWER_CONFIG.SHIELD_BASE_ABSORPTION,
+          maxAbsorption: POWER_CONFIG.SHIELD_BASE_ABSORPTION,
+          createdAt: Date.now(),
+          rotation: 0,
+          angle: angle,
+          isActive: true
+        });
+      }
+    }
   }
 
   /**
@@ -424,30 +405,36 @@ export class PowerSystem {
   /**
    * Obtener cooldown del Escudo de Atena según nivel
    */
-  static getAthenaShieldCooldown(level: number): number {
-    return this.getShieldConfig(level).cooldown;
+  static getAthenaShieldCooldown(_level: number): number {
+    return 100; // Cooldown muy bajo, los escudos se regeneran cada 15s
   }
 
   /**
-   * Verificar si el jugador tiene escudo activo
+   * Verificar si el jugador tiene al menos un escudo activo
    */
   static hasActiveShield(playerId: string): boolean {
-    return this.activeShields.some(shield => shield.playerId === playerId);
+    return this.activeShields.some(shield => shield.playerId === playerId && shield.isActive && shield.absorption > 0);
   }
 
   /**
-   * Aplicar daño al escudo y devolver el daño restante
+   * Aplicar daño a un escudo y devolver el daño restante
+   * Los escudos absorben daño de proyectiles enemigos
    */
   static applyDamageToShield(playerId: string, damage: number): number {
-    const shield = this.activeShields.find(s => s.playerId === playerId);
+    // Buscar el primer escudo activo con absorción disponible
+    const shield = this.activeShields.find(s => 
+      s.playerId === playerId && s.isActive && s.absorption > 0
+    );
+    
     if (!shield) return damage;
     
     const absorbedDamage = Math.min(damage, shield.absorption);
     shield.absorption -= absorbedDamage;
     
-    // Si el escudo se agotó, eliminarlo
+    // Si el escudo se agotó, marcarlo como inactivo
     if (shield.absorption <= 0) {
-      this.activeShields = this.activeShields.filter(s => s.id !== shield.id);
+      shield.isActive = false;
+      shield.absorption = 0;
     }
     
     return damage - absorbedDamage;
@@ -555,19 +542,58 @@ export class PowerSystem {
   }
 
   /**
-   * Actualizar escudos activos
+   * Actualizar escudos activos (rotación y regeneración)
    */
-  static updateShields(deltaTime: number): void {
+  static updateShields(deltaTime: number, playerLevel: number): void {
     const now = Date.now();
+    const regenerationTime = POWER_CONFIG.SHIELD_REGENERATION_TIME;
     
-    // Actualizar rotación y verificar duración
-    this.activeShields = this.activeShields.filter(shield => {
-      const age = now - shield.createdAt;
-      if (age >= shield.duration) return false;
-      
-      // Actualizar rotación
+    // Actualizar rotación de todos los escudos
+    this.activeShields.forEach(shield => {
+      // Actualizar rotación orbital
       shield.rotation += POWER_CONFIG.SHIELD_ROTATION_SPEED * deltaTime;
-      return true;
+      
+      // Regenerar escudos inactivos cada 15 segundos
+      if (!shield.isActive) {
+        const timeSinceDestroyed = now - shield.createdAt;
+        if (timeSinceDestroyed >= regenerationTime) {
+          shield.isActive = true;
+          shield.absorption = shield.maxAbsorption;
+          shield.createdAt = now;
+        }
+      }
+    });
+    
+    // Si el nivel del poder aumentó, agregar escudos adicionales
+    const shieldsPerPlayer: { [key: string]: ActiveShield[] } = {};
+    this.activeShields.forEach(shield => {
+      if (!shieldsPerPlayer[shield.playerId]) {
+        shieldsPerPlayer[shield.playerId] = [];
+      }
+      shieldsPerPlayer[shield.playerId].push(shield);
+    });
+    
+    // Verificar si hay que agregar escudos nuevos por nivel
+    Object.keys(shieldsPerPlayer).forEach(playerId => {
+      const shields = shieldsPerPlayer[playerId];
+      const requiredShields = playerLevel; // El nivel determina cuántos escudos
+      
+      if (shields.length < requiredShields) {
+        // Agregar escudos faltantes
+        for (let i = shields.length; i < requiredShields; i++) {
+          const angle = (i / requiredShields) * Math.PI * 2;
+          this.activeShields.push({
+            id: this.nextShieldId++,
+            playerId,
+            absorption: POWER_CONFIG.SHIELD_BASE_ABSORPTION,
+            maxAbsorption: POWER_CONFIG.SHIELD_BASE_ABSORPTION,
+            createdAt: now,
+            rotation: 0,
+            angle: angle,
+            isActive: true
+          });
+        }
+      }
     });
   }
 
@@ -923,78 +949,65 @@ export class PowerSystem {
 
   /**
    * 🛡️✨ Dibujar Escudos de Atena ÉPICOS ✨🛡️
-   * Escudos protectores brillantes con símbolos divinos
+   * Escudos protectores giratorios alrededor del jugador
    */
   static drawShields(ctx: CanvasRenderingContext2D, playerX: number, playerY: number): void {
     const now = Date.now();
     
     this.activeShields.forEach(shield => {
-      const age = now - shield.createdAt;
-      const progress = age / shield.duration;
-      const opacity = (1 - progress * 0.3) * (shield.absorption / shield.maxAbsorption); // Opacidad basada en absorción restante
+      if (!shield.isActive && shield.absorption === 0) {
+        // No dibujar escudos destruidos y en regeneración
+        return;
+      }
+      
+      const opacity = shield.isActive ? (shield.absorption / shield.maxAbsorption) : 0.3;
+      
+      // Calcular posición orbital del escudo
+      const orbitAngle = shield.angle + shield.rotation;
+      const shieldX = playerX + Math.cos(orbitAngle) * POWER_CONFIG.SHIELD_RADIUS;
+      const shieldY = playerY + Math.sin(orbitAngle) * POWER_CONFIG.SHIELD_RADIUS;
       
       ctx.save();
-      ctx.translate(playerX, playerY);
+      ctx.translate(shieldX, shieldY);
+      ctx.rotate(orbitAngle); // Rotación visual del escudo
       
-      // Rotación del escudo
-      const rotation = shield.rotation;
-      
-      // Aura exterior dorada pulsante
-      const pulseScale = 1 + Math.sin(age / 100) * 0.1;
-      ctx.globalAlpha = opacity * 0.3;
-      ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.3})`;
-      ctx.shadowBlur = 20;
+      // Aura dorada exterior
+      const pulseScale = 1 + Math.sin(now / 100) * 0.1;
+      ctx.globalAlpha = opacity * 0.4;
+      ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.4})`;
+      ctx.shadowBlur = 15;
       ctx.shadowColor = '#FFD700';
       ctx.beginPath();
-      ctx.arc(0, 0, POWER_CONFIG.SHIELD_RADIUS * pulseScale * 1.2, 0, Math.PI * 2);
+      ctx.arc(0, 0, POWER_CONFIG.SHIELD_SIZE * pulseScale * 0.6, 0, Math.PI * 2);
       ctx.fill();
       
       // Escudo principal (azul divino)
-      ctx.globalAlpha = opacity * 0.6;
-      ctx.fillStyle = `rgba(100, 180, 255, ${opacity * 0.4})`;
+      ctx.globalAlpha = opacity * 0.7;
+      ctx.fillStyle = `rgba(100, 180, 255, ${opacity * 0.5})`;
       ctx.strokeStyle = `rgba(150, 220, 255, ${opacity})`;
       ctx.lineWidth = 3;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 12;
       ctx.shadowColor = '#64B4FF';
       ctx.beginPath();
-      ctx.arc(0, 0, POWER_CONFIG.SHIELD_RADIUS, 0, Math.PI * 2);
+      ctx.arc(0, 0, POWER_CONFIG.SHIELD_SIZE * 0.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       
-      // Bordes dorados del escudo
+      // Borde dorado
       ctx.globalAlpha = opacity;
       ctx.strokeStyle = `rgba(255, 215, 0, ${opacity})`;
-      ctx.lineWidth = 4;
-      ctx.shadowBlur = 12;
-      ctx.shadowColor = '#FFD700';
-      ctx.beginPath();
-      ctx.arc(0, 0, POWER_CONFIG.SHIELD_RADIUS, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Símbolos divinos giratorios (8 puntos)
-      for (let i = 0; i < 8; i++) {
-        const symbolAngle = rotation + (i / 8) * Math.PI * 2;
-        const symbolX = Math.cos(symbolAngle) * POWER_CONFIG.SHIELD_RADIUS * 0.7;
-        const symbolY = Math.sin(symbolAngle) * POWER_CONFIG.SHIELD_RADIUS * 0.7;
-        
-        ctx.globalAlpha = opacity * 0.8;
-        ctx.fillStyle = `rgba(255, 230, 100, ${opacity})`;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#FFD700';
-        
-        ctx.beginPath();
-        ctx.arc(symbolX, symbolY, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      
-      // Símbolo central de Atena (cruz dorada)
-      ctx.globalAlpha = opacity;
-      ctx.strokeStyle = `rgba(255, 215, 0, ${opacity})`;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2;
       ctx.shadowBlur = 10;
       ctx.shadowColor = '#FFD700';
+      ctx.beginPath();
+      ctx.arc(0, 0, POWER_CONFIG.SHIELD_SIZE * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
       
-      const crossSize = 15;
+      // Símbolo de Atena (cruz)
+      ctx.strokeStyle = `rgba(255, 230, 100, ${opacity})`;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
+      const crossSize = POWER_CONFIG.SHIELD_SIZE * 0.25;
       ctx.beginPath();
       ctx.moveTo(-crossSize, 0);
       ctx.lineTo(crossSize, 0);
@@ -1002,16 +1015,31 @@ export class PowerSystem {
       ctx.lineTo(0, crossSize);
       ctx.stroke();
       
-      // Núcleo brillante central
-      ctx.globalAlpha = opacity;
+      // Núcleo brillante
       ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.shadowColor = '#FFFFFF';
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.restore();
+      
+      // Indicador de regeneración (si está inactivo)
+      if (!shield.isActive) {
+        const timeSinceDestroyed = now - shield.createdAt;
+        const regenProgress = Math.min(timeSinceDestroyed / POWER_CONFIG.SHIELD_REGENERATION_TIME, 1);
+        
+        ctx.save();
+        ctx.translate(shieldX, shieldY);
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, POWER_CONFIG.SHIELD_SIZE * 0.6, -Math.PI / 2, -Math.PI / 2 + regenProgress * Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     });
   }
 

@@ -101,6 +101,8 @@ interface PlayerUpgrades {
   maxHealth: number;
   explosion: number;
   lightning: number;
+  goldenArrow: number;
+  athenaShield: number;
 }
 
 interface BossAttackEffect {
@@ -161,7 +163,9 @@ const SaintSeiyaGame: React.FC = () => {
     multiShot: 0,
     maxHealth: 0,
     explosion: 0,
-    lightning: 0
+    lightning: 0,
+    goldenArrow: 0,
+    athenaShield: 0
   });
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
   const [playerSprite, setPlayerSprite] = useState<AnimatedSprite | null>(null);
@@ -189,6 +193,7 @@ const SaintSeiyaGame: React.FC = () => {
   const spawnWarningsRef = useRef<SpawnWarning[]>([]);
   const lastCleanupTime = useRef<number>(0);
   const lastLightningTrigger = useRef<number>(0);
+  const lastGoldenArrowTrigger = useRef<number>(0);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -257,7 +262,7 @@ const SaintSeiyaGame: React.FC = () => {
     
     // Inicializar música de fondo
     if (!backgroundMusic.current) {
-      const audio = new Audio('/music.mp3');
+      const audio = new Audio(`${import.meta.env.BASE_URL}assets/audio/bgm/menu.mp3`);
       audio.loop = true;
       audio.volume = AUDIO_CONFIG.BACKGROUND_MUSIC_VOLUME;
       audio.play().catch(() => {});
@@ -287,7 +292,7 @@ const SaintSeiyaGame: React.FC = () => {
         setProjectileImage(projImg);
       };
       projImg.onerror = () => {};
-      projImg.src = '/sprites/attacks/attack_1.png';
+      projImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/attack_1.png`;
       
       // Cargar sprite de ataque del boss
       const bossAttackImg = new Image();
@@ -295,13 +300,13 @@ const SaintSeiyaGame: React.FC = () => {
         setBossAttackImage(bossAttackImg);
       };
       bossAttackImg.onerror = () => {};
-      bossAttackImg.src = '/sprites/attacks/boss_attack.png';
+      bossAttackImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_attack.png`;
       
       // Cargar sprites de super ataque del boss (animación de 3 frames)
       const superAttackSprites: HTMLImageElement[] = [];
       for (let i = 1; i <= 3; i++) {
         const img = new Image();
-        img.src = `/sprites/attacks/boss_super_attack${i}.png`;
+        img.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_super_attack${i}.png`;
         img.onload = () => {
           if (i === 3) {
             setBossSuperAttackSprites([...superAttackSprites]);
@@ -317,7 +322,7 @@ const SaintSeiyaGame: React.FC = () => {
         setFloorImage(floorImg);
       };
       floorImg.onerror = () => {};
-      floorImg.src = '/sprites/stages/floor_1_stage.png';
+      floorImg.src = `${import.meta.env.BASE_URL}assets/sprites/stages/floor_1_stage.png`;
     } catch (error) {
       // Error silencioso al cargar sprites
     }
@@ -853,6 +858,110 @@ const SaintSeiyaGame: React.FC = () => {
       PowerSystem.updateEffects();
       // ===== FIN SISTEMA DE RAYO =====
       
+      // ===== SISTEMA DE FLECHA DE ORO =====
+      if (upgrades.goldenArrow > 0) {
+        const arrowLevel = upgrades.goldenArrow;
+        const arrowCooldown = PowerSystem.getGoldenArrowCooldown(arrowLevel);
+        
+        if (nowLightning - lastGoldenArrowTrigger.current >= arrowCooldown) {
+          lastGoldenArrowTrigger.current = nowLightning;
+          
+          // Activar flecha de oro
+          PowerSystem.triggerGoldenArrow(
+            currentPlayer.x,
+            currentPlayer.y,
+            arrowLevel,
+            currentEnemies,
+            (enemyId, damage) => {
+              setEnemies(prev => prev.map(e => {
+                if (e.id === enemyId) {
+                  const newHealth = e.health - damage;
+                  if (newHealth <= 0) {
+                    // Crear drop
+                    const rand = Math.random();
+                    setDrops(prevDrops => [...prevDrops, {
+                      id: nextOrbId.current++,
+                      x: e.x,
+                      y: e.y,
+                      type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                      value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
+                      lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                    }]);
+                    setScore(s => s + 100);
+                    setWaveKills(k => {
+                      const newKills = k + 1;
+                      if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                        setWaveNumber(w => w + 1);
+                        return 0;
+                      }
+                      return newKills;
+                    });
+                    return null; // Eliminar enemigo
+                  }
+                  return { ...e, health: newHealth };
+                }
+                return e;
+              }).filter(e => e !== null) as Enemy[]);
+            }
+          );
+        }
+      }
+      
+      // Actualizar flechas doradas (movimiento y colisiones)
+      PowerSystem.updateGoldenArrows(
+        deltaTime,
+        currentEnemies,
+        (enemyId, damage) => {
+          setEnemies(prev => prev.map(e => {
+            if (e.id === enemyId) {
+              const newHealth = e.health - damage;
+              if (newHealth <= 0) {
+                // Crear drop
+                const rand = Math.random();
+                setDrops(prevDrops => [...prevDrops, {
+                  id: nextOrbId.current++,
+                  x: e.x,
+                  y: e.y,
+                  type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                  value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
+                  lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                }]);
+                setScore(s => s + 100);
+                setWaveKills(k => {
+                  const newKills = k + 1;
+                  if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                    setWaveNumber(w => w + 1);
+                    return 0;
+                  }
+                  return newKills;
+                });
+                return null; // Eliminar enemigo
+              }
+              return { ...e, health: newHealth };
+            }
+            return e;
+          }).filter(e => e !== null) as Enemy[]);
+        }
+      );
+      // ===== FIN SISTEMA DE FLECHA DE ORO =====
+      
+      // ===== SISTEMA DE ESCUDO DE ATENA =====
+      if (upgrades.athenaShield > 0) {
+        const shieldLevel = upgrades.athenaShield;
+        
+        // Inicializar escudos si no existen
+        PowerSystem.triggerAthenaShield(
+          currentPlayer.x,
+          currentPlayer.y,
+          'player',
+          shieldLevel
+        );
+        
+        // Actualizar escudos (rotación y regeneración)
+        PowerSystem.updateShields(deltaTime, shieldLevel);
+      }
+      // ===== FIN SISTEMA DE ESCUDO DE ATENA =====
+      
       // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
       const now = Date.now();
       setSpawnWarnings(prev => {
@@ -1007,12 +1116,23 @@ const SaintSeiyaGame: React.FC = () => {
           const distToPlayer = Math.hypot(currentPlayer.x - proj.x, currentPlayer.y - proj.y);
           if (distToPlayer < PROJECTILE_CONFIG.ENEMY_PROJECTILE_HIT_RADIUS) {
             projectileHit = true;
-            setPlayer(p => {
-              if (!p) return p;
-              const newHealth = p.health - PROJECTILE_CONFIG.ENEMY_PROJECTILE_DAMAGE;
-              if (newHealth <= 0) setGameState('gameover');
-              return { ...p, health: Math.max(0, newHealth) };
-            });
+            
+            // Intentar aplicar daño al escudo primero
+            let remainingDamage: number = PROJECTILE_CONFIG.ENEMY_PROJECTILE_DAMAGE;
+            if (PowerSystem.hasActiveShield('player')) {
+              remainingDamage = PowerSystem.applyDamageToShield('player', PROJECTILE_CONFIG.ENEMY_PROJECTILE_DAMAGE);
+            }
+            
+            // Aplicar daño restante al jugador
+            if (remainingDamage > 0) {
+              setPlayer(p => {
+                if (!p) return p;
+                const newHealth = p.health - remainingDamage;
+                if (newHealth <= 0) setGameState('gameover');
+                return { ...p, health: Math.max(0, newHealth) };
+              });
+            }
+            
             setScreenShake({ 
               x: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY, 
               y: (Math.random() - 0.5) * VISUAL_CONFIG.SCREEN_SHAKE_INTENSITY 
@@ -1677,6 +1797,8 @@ const SaintSeiyaGame: React.FC = () => {
         // Dibujar efectos de Rayo de Zeus
         PowerSystem.drawLightning(ctx);
         PowerSystem.drawPowerEffects(ctx);
+        PowerSystem.drawGoldenArrows(ctx);
+        PowerSystem.drawShields(ctx, player.x, player.y);
         
         // Dibujar efectos de ataque del boss (bolas de poder) - limitar a 10 más recientes
         if (bossAttackImage && bossAttackImage.complete) {
