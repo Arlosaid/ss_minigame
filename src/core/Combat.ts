@@ -150,15 +150,7 @@ export class CombatSystem {
       ctx.save();
       ctx.globalAlpha = opacity;
       
-      // Línea de ataque
-      ctx.strokeStyle = '#FFD700'; // Dorado
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(effect.startX, effect.startY);
-      ctx.lineTo(effect.endX, effect.endY);
-      ctx.stroke();
-      
-      // Destello en el punto de impacto
+      // Destello en el punto de impacto (sin línea)
       const glowRadius = 10 * (1 - progress);
       const gradient = ctx.createRadialGradient(
         effect.endX, effect.endY, 0,

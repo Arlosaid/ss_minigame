@@ -18,6 +18,9 @@ interface Player {
   exp: number;
   expToNext: number;
   level: number;
+  gold: number;
+  combo: number;
+  comboTimer: number;
 }
 
 interface Enemy {
@@ -29,6 +32,7 @@ interface Enemy {
   speed: number;
   type: 'normal' | 'fast' | 'tank';
   angle: number;
+  goldValue: number;
 }
 
 interface Boss {
@@ -109,6 +113,11 @@ const SaintSeiyaGame: React.FC = () => {
   const [projectileImage, setProjectileImage] = useState<HTMLImageElement | null>(null);
   const [floorImage, setFloorImage] = useState<HTMLImageElement | null>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
+  const [stageTime, setStageTime] = useState(0);
+  const [waveNumber, setWaveNumber] = useState(1);
+  const [screenShake, setScreenShake] = useState({ x: 0, y: 0 });
+  const stageStartTime = useRef<number>(0);
+  const backgroundMusic = useRef<HTMLAudioElement | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -129,14 +138,29 @@ const SaintSeiyaGame: React.FC = () => {
       maxHealth: 100,
       exp: 0,
       expToNext: 100,
-      level: 1
+      level: 1,
+      gold: 0,
+      combo: 0,
+      comboTimer: 0
     });
     
     setGameStarted(true);
     setCurrentHouse(0);
-    setWaveEnemies(20);
+    setWaveEnemies(100); // Número alto para modo survival continuo
     setWaveKills(0);
     setGameState('playing');
+    setStageTime(0);
+    setWaveNumber(1);
+    stageStartTime.current = Date.now();
+    
+    // Inicializar música de fondo
+    if (!backgroundMusic.current) {
+      const audio = new Audio('/music.mp3');
+      audio.loop = true;
+      audio.volume = 0.3;
+      audio.play().catch(err => console.log('Audio playback failed:', err));
+      backgroundMusic.current = audio;
+    }
     
     // Cargar sprite del jugador
     try {
@@ -170,26 +194,6 @@ const SaintSeiyaGame: React.FC = () => {
     }
   };
 
-  const spawnEnemy = useCallback(() => {
-    const types: Array<'normal' | 'fast' | 'tank'> = ['normal', 'fast', 'tank'];
-    const type = types[Math.floor(Math.random() * types.length)]!;
-    
-    // Spawn en posiciones completamente aleatorias dentro del mapa
-    const x = Math.random() * MAP_WIDTH;
-    const y = Math.random() * MAP_HEIGHT;
-
-    // Crear advertencia de spawn en lugar de enemigo directo
-    const warning: SpawnWarning = {
-      id: nextWarningId.current++,
-      x, y,
-      type,
-      spawnTime: Date.now() + 1500, // Spawn después de 1.5 segundos
-      warningDuration: 1500
-    };
-    
-    setSpawnWarnings(prev => [...prev, warning]);
-  }, []);
-
   const spawnBoss = useCallback(() => {
     if (currentHouse >= GOLD_SAINTS.length) return;
     
@@ -205,6 +209,9 @@ const SaintSeiyaGame: React.FC = () => {
       phase: 1
     });
     setGameState('playing');
+    setWaveNumber(1);
+    setStageTime(0);
+    stageStartTime.current = Date.now();
   }, [currentHouse]);
 
   const shoot = useCallback(() => {
@@ -274,11 +281,11 @@ const SaintSeiyaGame: React.FC = () => {
         id: nextProjectileId.current++,
         x: startX,
         y: startY,
-        dx: Math.cos(angle) * 5,
-        dy: Math.sin(angle) * 5,
+        dx: Math.cos(angle) * 2.5,
+        dy: Math.sin(angle) * 2.5,
         damage: player.knight.damage + upgrades.damage,
         color: player.knight.projectileColor,
-        pierce: upgrades.pierce,
+        pierce: 0,
         isEnemy: false,
         angle: angle
       });
@@ -300,9 +307,15 @@ const SaintSeiyaGame: React.FC = () => {
     setPlayer(prev => {
       if (!prev) return prev;
       
-      let newExp = prev.exp + amount;
+      // Sistema de combo
+      const comboMultiplier = 1 + (prev.combo * 0.1);
+      const finalAmount = Math.floor(amount * comboMultiplier);
+      
+      let newExp = prev.exp + finalAmount;
       let newLevel = prev.level;
       let newExpToNext = prev.expToNext;
+      let newCombo = Math.min(prev.combo + 1, 10);
+      const newComboTimer = 3000; // 3 segundos para mantener combo
       
       while (newExp >= newExpToNext) {
         newExp -= newExpToNext;
@@ -318,7 +331,7 @@ const SaintSeiyaGame: React.FC = () => {
         setGameState('levelup');
       }
       
-      return { ...prev, exp: newExp, level: newLevel, expToNext: newExpToNext };
+      return { ...prev, exp: newExp, level: newLevel, expToNext: newExpToNext, combo: newCombo, comboTimer: newComboTimer };
     });
   }, [player]);
 
@@ -362,21 +375,72 @@ const SaintSeiyaGame: React.FC = () => {
     };
   }, []);
 
+  // Limpiar audio al desmontar componente
   useEffect(() => {
-    if (!gameStarted || !player || gameState !== 'playing') return;
+    return () => {
+      if (backgroundMusic.current) {
+        backgroundMusic.current.pause();
+        backgroundMusic.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!gameStarted || !player || gameState !== 'playing' || boss) return;
     
-    const spawnInterval = Math.max(100, 300 - (waveKills * 5)); // Spawn mucho más rápido
+    // Sistema progresivo de survival: empieza cada 2 segundos, reduce progresivamente
+    const baseInterval = 2000; // 2 segundos iniciales
+    const reduction = (waveNumber - 1) * 100; // Reducir 100ms por oleada
+    const spawnInterval = Math.max(500, baseInterval - reduction); // Mínimo 500ms
+    
+    console.log(`🎮 SPAWN SYSTEM ACTIVE: Intervalo ${spawnInterval}ms | Oleada ${waveNumber}`);
     
     const interval = setInterval(() => {
-      if (boss) return;
-      // Permitir más enemigos y advertencias combinados
-      if ((enemies.length + spawnWarnings.length) < 80 && waveKills < waveEnemies) {
-        spawnEnemy();
+      // Sistema de oleadas progresivo
+      let availableTypes: Array<'normal' | 'fast' | 'tank'> = ['normal'];
+      if (waveNumber >= 2) availableTypes.push('fast');
+      if (waveNumber >= 3) availableTypes.push('tank');
+      
+      const type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
+      
+      // Spawn en posiciones ALEATORIAS DENTRO del mapa visible
+      let x = 50 + Math.random() * (MAP_WIDTH - 100);
+      let y = 50 + Math.random() * (MAP_HEIGHT - 100);
+      
+      // Evitar spawn muy cerca del jugador (mínimo 200px)
+      if (player) {
+        const dist = Math.hypot(x - player.x, y - player.y);
+        if (dist < 200) {
+          // Intentar una segunda vez
+          x = 50 + Math.random() * (MAP_WIDTH - 100);
+          y = 50 + Math.random() * (MAP_HEIGHT - 100);
+        }
       }
+      
+      console.log(`🎯 CREATING WARNING at (${Math.floor(x)}, ${Math.floor(y)}) type: ${type}`);
+      
+      // Crear advertencia de spawn (0.8 segundos)
+      const warning: SpawnWarning = {
+        id: nextWarningId.current++,
+        x, y,
+        type,
+        spawnTime: Date.now() + 800,
+        warningDuration: 800
+      };
+      
+      setSpawnWarnings(prev => {
+        const maxWarnings = Math.min(15 + (waveNumber * 3), 50);
+        if (prev.length >= maxWarnings) {
+          console.log(`⏸️ Too many warnings: ${prev.length}`);
+          return prev;
+        }
+        console.log(`✨ Warning added! Total warnings: ${prev.length + 1}`);
+        return [...prev, warning];
+      });
     }, spawnInterval);
     
     return () => clearInterval(interval);
-  }, [gameStarted, player, gameState, boss, enemies.length, spawnWarnings.length, waveKills, waveEnemies, spawnEnemy]);
+  }, [gameStarted, player, gameState, waveNumber, boss]);
 
   useEffect(() => {
     if (!gameStarted || !player || gameState !== 'playing') return;
@@ -391,10 +455,27 @@ const SaintSeiyaGame: React.FC = () => {
       const deltaTime = Math.min((currentTime - lastTime) / 1000, 0.1); // Limitar a 100ms máximo
       lastTime = currentTime;
       
-      // Velocidad base en píxeles por segundo (aumentada significativamente)
-      const baseSpeed = 400; // Velocidad base mucho más rápida
+      // Actualizar timer del stage
+      const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
+      setStageTime(currentStageTime);
+      
+      // Verificar si debe aparecer el jefe (3 minutos)
+      if (currentStageTime >= 180 && !boss) {
+        spawnBoss();
+      }
+      
+      // Velocidad base en píxeles por segundo (reducida para mejor control)
+      const baseSpeed = 180; // Velocidad base más balanceada
       const speedMultiplier = player.knight.speed + upgrades.speed * 0.5;
       const pixelsPerSecond = baseSpeed * speedMultiplier;
+      
+      // Actualizar combo timer
+      setPlayer(p => {
+        if (!p) return p;
+        const newComboTimer = Math.max(0, p.comboTimer - deltaTime * 1000);
+        const newCombo = newComboTimer <= 0 ? 0 : p.combo;
+        return { ...p, comboTimer: newComboTimer, combo: newCombo };
+      });
       
       // Leer input y construir vector de dirección
       let dx = 0, dy = 0;
@@ -435,26 +516,59 @@ const SaintSeiyaGame: React.FC = () => {
       // Procesar spawn warnings y convertir en enemigos cuando sea tiempo
       const now = Date.now();
       setSpawnWarnings(prev => {
+        if (prev.length === 0) return prev;
+        
         const remaining: SpawnWarning[] = [];
+        let spawned = 0;
         
         prev.forEach(warning => {
           if (now >= warning.spawnTime) {
-            // Crear el enemigo
+            // Crear el enemigo con estadísticas balanceadas para survival
+            let health: number, maxHealth: number, speed: number, goldValue: number;
+            
+            switch (warning.type) {
+              case 'tank':
+                health = 40 + (waveNumber * 5); // Más resistente
+                maxHealth = health;
+                speed = 0.4; // Lento
+                goldValue = 15;
+                break;
+              case 'fast':
+                health = 15 + (waveNumber * 2); // Frágil
+                maxHealth = health;
+                speed = 1.2; // Muy rápido
+                goldValue = 8;
+                break;
+              default: // 'normal'
+                health = 25 + (waveNumber * 3);
+                maxHealth = health;
+                speed = 0.7; // Velocidad media
+                goldValue = 10;
+            }
+            
             const enemy: Enemy = {
               id: nextEnemyId.current++,
               x: warning.x,
               y: warning.y,
-              health: warning.type === 'tank' ? 30 : warning.type === 'fast' ? 15 : 20,
-              maxHealth: warning.type === 'tank' ? 30 : warning.type === 'fast' ? 15 : 20,
-              speed: warning.type === 'fast' ? 1.1 : warning.type === 'tank' ? 0.4 : 0.65,
+              health,
+              maxHealth,
+              speed,
               type: warning.type,
-              angle: 0
+              angle: 0,
+              goldValue
             };
+            
+            console.log(`🐛 SPAWNING ENEMY at (${Math.floor(enemy.x)}, ${Math.floor(enemy.y)}) type: ${enemy.type}`);
             setEnemies(e => [...e, enemy]);
+            spawned++;
           } else {
             remaining.push(warning);
           }
         });
+        
+        if (spawned > 0) {
+          console.log(`✅ Spawned ${spawned} enemigo(s) | Warnings remaining: ${remaining.length}`);
+        }
         
         return remaining;
       });
@@ -464,15 +578,28 @@ const SaintSeiyaGame: React.FC = () => {
         .filter(p => p.x >= -50 && p.x <= MAP_WIDTH + 50 && p.y >= -50 && p.y <= MAP_HEIGHT + 50)
       );
       
-      setEnemies(prev => prev.map(enemy => {
-        const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
-        return {
-          ...enemy,
-          x: enemy.x + Math.cos(angle) * enemy.speed,
-          y: enemy.y + Math.sin(angle) * enemy.speed,
-          angle
-        };
-      }));
+      // Actualizar enemigos para que persigan al jugador
+      setEnemies(prev => {
+        if (prev.length > 0 && Math.random() < 0.01) { // Log ocasional
+          console.log(`👹 Enemies active: ${prev.length}`);
+        }
+        
+        return prev.map(enemy => {
+          const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+          
+          // Velocidad base multiplicada por deltaTime para movimiento suave
+          // enemy.speed es un multiplicador (0.3 a 0.8)
+          const baseEnemySpeed = 120; // píxeles por segundo
+          const actualSpeed = baseEnemySpeed * enemy.speed * deltaTime;
+          
+          return {
+            ...enemy,
+            x: enemy.x + Math.cos(angle) * actualSpeed,
+            y: enemy.y + Math.sin(angle) * actualSpeed,
+            angle
+          };
+        });
+      });
       
       setExpOrbs(prev => prev.map(orb => {
         const dist = Math.hypot(player.x - orb.x, player.y - orb.y);
@@ -505,6 +632,9 @@ const SaintSeiyaGame: React.FC = () => {
                 if (!p) return p;
                 const newHealth = p.health - 10;
                 if (newHealth <= 0) setGameState('gameover');
+                // Screen shake al recibir daño
+                setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
+                setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
                 return { ...p, health: Math.max(0, newHealth) };
               });
             } else {
@@ -512,7 +642,6 @@ const SaintSeiyaGame: React.FC = () => {
             }
           } else {
             let hit = false;
-            let pierce = proj.pierce;
             
             if (boss) {
               if (Math.hypot(boss.x - proj.x, boss.y - proj.y) < 40) {
@@ -522,8 +651,13 @@ const SaintSeiyaGame: React.FC = () => {
                   if (newHealth <= 0) {
                     dropExpOrb(b.x, b.y, 100);
                     setScore(s => s + 1000);
+                    // Dar oro por derrotar jefe
+                    setPlayer(p => {
+                      if (!p) return p;
+                      return { ...p, gold: p.gold + 100 };
+                    });
                     setCurrentHouse(h => h + 1);
-                    setWaveEnemies(20);
+                    setWaveNumber(1); // Reiniciar oleadas para la siguiente casa
                     setWaveKills(0);
                     setGameState('houseclear');
                     setTimeout(() => {
@@ -536,7 +670,6 @@ const SaintSeiyaGame: React.FC = () => {
                   return { ...b, health: newHealth };
                 });
                 hit = true;
-                pierce--;
               }
             }
             
@@ -546,16 +679,23 @@ const SaintSeiyaGame: React.FC = () => {
                   const newHealth = enemy.health - proj.damage;
                   if (newHealth <= 0) {
                     dropExpOrb(enemy.x, enemy.y, 10);
+                    // Dropear oro
+                    setPlayer(p => {
+                      if (!p) return p;
+                      return { ...p, gold: p.gold + enemy.goldValue };
+                    });
                     setScore(s => s + 100);
                     setWaveKills(k => {
                       const newKills = k + 1;
-                      if (newKills >= waveEnemies && !boss) {
-                        spawnBoss();
+                      // Aumentar oleada cada 20 enemigos eliminados
+                      if (newKills % 20 === 0) {
+                        setWaveNumber(w => w + 1);
+                        console.log(`🌊 Nueva oleada: ${waveNumber + 1}`);
                       }
+                      // El boss aparece solo por tiempo (3 minutos), no por kills
                       return newKills;
                     });
                     hit = true;
-                    pierce--;
                     return false;
                   }
                   return true;
@@ -563,13 +703,14 @@ const SaintSeiyaGame: React.FC = () => {
                 return true;
               }).map(enemy => {
                 if (Math.hypot(enemy.x - proj.x, enemy.y - proj.y) < 20) {
+                  hit = true;
                   return { ...enemy, health: enemy.health - proj.damage };
                 }
                 return enemy;
               });
             });
             
-            if (!hit || pierce > 0) {
+            if (!hit) {
               remaining.push(proj);
             }
           }
@@ -584,6 +725,9 @@ const SaintSeiyaGame: React.FC = () => {
             if (!p) return p;
             const newHealth = p.health - 5;
             if (newHealth <= 0) setGameState('gameover');
+            // Screen shake al recibir daño
+            setScreenShake({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10 });
+            setTimeout(() => setScreenShake({ x: 0, y: 0 }), 100);
             return { ...p, health: Math.max(0, newHealth) };
           });
           return false;
@@ -668,7 +812,7 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, gameState, keysPressed, shoot, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropExpOrb, gainExp]);
+  }, [gameStarted, player, gameState, keysPressed, shoot, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropExpOrb, gainExp, waveNumber]);
 
   useEffect(() => {
     if (!canvasRef.current || !player) return;
@@ -720,8 +864,8 @@ const SaintSeiyaGame: React.FC = () => {
         // Guardar estado del canvas
         ctx.save();
         
-        // Aplicar transformación de cámara
-        ctx.translate(-camera.x, -camera.y);
+        // Aplicar transformación de cámara con screen shake
+        ctx.translate(-camera.x + screenShake.x, -camera.y + screenShake.y);
         
         // Dibujar fondo del mapa con imagen repetida en su tamaño original
         if (floorImage && floorImage.complete) {
@@ -895,7 +1039,43 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillText(`Nivel: ${player.level}`, 220, 25);
         ctx.fillText(`Puntos: ${score}`, 220, 45);
         ctx.fillText(`Casa: ${currentHouse + 1}/12`, 10, 60);
-        ctx.fillText(`Enemigos: ${waveKills}/${waveEnemies}`, 10, 75);
+        ctx.fillText(`Enemigos eliminados: ${waveKills}`, 10, 75);
+        ctx.fillText(`Enemigos activos: ${enemies.length}`, 10, 90);
+        
+        // Timer del stage
+        const minutes = Math.floor(stageTime / 60);
+        const seconds = stageTime % 60;
+        const timeColor = stageTime >= 180 ? '#0F0' : '#FFF';
+        ctx.fillStyle = timeColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`⏱ ${minutes}:${seconds.toString().padStart(2, '0')}`, WIDTH / 2, 30);
+        
+        // Oleada actual
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '16px Arial';
+        ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
+        
+        // Oro
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`💰 ${player.gold}`, WIDTH - 10, 25);
+        
+        // Combo
+        if (player.combo > 0) {
+          ctx.fillStyle = '#FF00FF';
+          ctx.font = 'bold 24px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`COMBO x${player.combo}`, WIDTH / 2, HEIGHT - 30);
+          
+          // Barra de combo timer
+          const comboBarWidth = 200;
+          ctx.fillStyle = 'rgba(255, 0, 255, 0.3)';
+          ctx.fillRect(WIDTH / 2 - comboBarWidth / 2, HEIGHT - 10, comboBarWidth, 5);
+          ctx.fillStyle = '#FF00FF';
+          ctx.fillRect(WIDTH / 2 - comboBarWidth / 2, HEIGHT - 10, comboBarWidth * (player.comboTimer / 3000), 5);
+        }
       }
       
       animationFrameId = requestAnimationFrame(render);
@@ -908,7 +1088,7 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [player, enemies, boss, projectiles, expOrbs, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera]);
+  }, [player, enemies, boss, projectiles, expOrbs, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake]);
 
   if (!gameStarted) {
     return (
