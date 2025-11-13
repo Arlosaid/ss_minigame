@@ -15,12 +15,12 @@ interface Player {
   knight: Knight;
   health: number;
   maxHealth: number;
-  exp: number;
-  expToNext: number;
+  cosmos: number; // Energía Cósmica (reemplaza exp)
   level: number;
-  gold: number;
   combo: number;
   comboTimer: number;
+  magnetActive: boolean; // Estado del efecto magnético
+  magnetDuration: number; // Duración restante del magnet en segundos
 }
 
 interface Enemy {
@@ -32,7 +32,7 @@ interface Enemy {
   speed: number;
   type: 'normal' | 'fast' | 'tank';
   angle: number;
-  goldValue: number;
+  cosmosValue: number; // Cantidad de cosmos que dropea
 }
 
 interface Boss {
@@ -59,11 +59,13 @@ interface Projectile {
   angle: number;
 }
 
-interface ExpOrb {
+interface Drop {
   id: number;
   x: number;
   y: number;
   value: number;
+  type: 'cosmos' | 'health' | 'magnet'; // Tipos de drops
+  lifetime: number; // Tiempo de vida en segundos
 }
 
 interface SpawnWarning {
@@ -81,6 +83,7 @@ interface PlayerUpgrades {
   fireRate: number;
   multiShot: number;
   pierce: number;
+  maxHealth: number; // Nuevo upgrade
   explosion: number;
 }
 
@@ -90,7 +93,7 @@ const SaintSeiyaGame: React.FC = () => {
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [boss, setBoss] = useState<Boss | null>(null);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
-  const [expOrbs, setExpOrbs] = useState<ExpOrb[]>([]);
+  const [drops, setDrops] = useState<Drop[]>([]);
   const [spawnWarnings, setSpawnWarnings] = useState<SpawnWarning[]>([]);
   const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set());
   const [score, setScore] = useState(0);
@@ -105,6 +108,7 @@ const SaintSeiyaGame: React.FC = () => {
     fireRate: 0,
     multiShot: 0,
     pierce: 0,
+    maxHealth: 0,
     explosion: 0
   });
   const [upgradeChoices, setUpgradeChoices] = useState<Upgrade[]>([]);
@@ -142,12 +146,12 @@ const SaintSeiyaGame: React.FC = () => {
       knight,
       health: 100,
       maxHealth: 100,
-      exp: 0,
-      expToNext: 100,
+      cosmos: 0,
       level: 1,
-      gold: 0,
       combo: 0,
-      comboTimer: 0
+      comboTimer: 0,
+      magnetActive: false,
+      magnetDuration: 0
     });
     
     setGameStarted(true);
@@ -300,14 +304,17 @@ const SaintSeiyaGame: React.FC = () => {
     setProjectiles(prev => [...prev, ...newProjectiles]);
   }, [player, gameState, lastShot, upgrades, enemies, boss]);
 
-  const dropExpOrb = useCallback((x: number, y: number, value: number) => {
-    setExpOrbs(prev => [...prev, {
+  const dropItem = useCallback((x: number, y: number, type: 'cosmos' | 'health' | 'magnet', value: number) => {
+    setDrops(prev => [...prev, {
       id: nextOrbId.current++,
-      x, y, value
+      x, y, 
+      type,
+      value,
+      lifetime: type === 'health' ? 8 : type === 'magnet' ? 8 : 15 // Health y magnet duran 8s, cosmos 15s
     }]);
   }, []);
 
-  const gainExp = useCallback((amount: number) => {
+  const gainCosmos = useCallback((amount: number) => {
     if (!player) return;
     
     setPlayer(prev => {
@@ -317,16 +324,18 @@ const SaintSeiyaGame: React.FC = () => {
       const comboMultiplier = 1 + (prev.combo * 0.1);
       const finalAmount = Math.floor(amount * comboMultiplier);
       
-      let newExp = prev.exp + finalAmount;
+      let newCosmos = prev.cosmos + finalAmount;
       let newLevel = prev.level;
-      let newExpToNext = prev.expToNext;
       let newCombo = Math.min(prev.combo + 1, 10);
       const newComboTimer = 3000; // 3 segundos para mantener combo
       
-      while (newExp >= newExpToNext) {
-        newExp -= newExpToNext;
+      // Fórmula de cosmos requerido: 100 * (nivel^1.5)
+      let cosmosRequired = Math.floor(100 * Math.pow(newLevel, 1.5));
+      
+      while (newCosmos >= cosmosRequired) {
+        newCosmos -= cosmosRequired;
         newLevel++;
-        newExpToNext = Math.floor(newExpToNext * 1.2);
+        cosmosRequired = Math.floor(100 * Math.pow(newLevel, 1.5));
         
         const choices: Upgrade[] = [];
         while (choices.length < 3) {
@@ -337,7 +346,13 @@ const SaintSeiyaGame: React.FC = () => {
         setGameState('levelup');
       }
       
-      return { ...prev, exp: newExp, level: newLevel, expToNext: newExpToNext, combo: newCombo, comboTimer: newComboTimer };
+      return { 
+        ...prev, 
+        cosmos: newCosmos, 
+        level: newLevel, 
+        combo: newCombo, 
+        comboTimer: newComboTimer 
+      };
     });
   }, [player]);
 
@@ -349,6 +364,20 @@ const SaintSeiyaGame: React.FC = () => {
       
       return { ...prev, [upgradeId]: current + 1 };
     });
+    
+    // Aplicar mejora de maxHealth inmediatamente si es el caso
+    if (upgradeId === 'maxHealth') {
+      setPlayer(p => {
+        if (!p) return p;
+        const healthBonus = 75; // +75 HP por nivel
+        return { 
+          ...p, 
+          maxHealth: p.maxHealth + healthBonus,
+          health: p.health + healthBonus // También aumentar la vida actual
+        };
+      });
+    }
+    
     setGameState('playing');
   };
 
@@ -397,10 +426,11 @@ const SaintSeiyaGame: React.FC = () => {
       return;
     }
     
-    // Sistema progresivo de survival: empieza cada 2 segundos, reduce progresivamente
-    const baseInterval = 2000; // 2 segundos iniciales
+    // Sistema progresivo con spawn interval reducido
+    // Oleada 1: 1.5s, reduce hasta 0.3s en oleadas altas
+    const baseInterval = 1500; // 1.5 segundos iniciales
     const reduction = (waveNumber - 1) * 100; // Reducir 100ms por oleada
-    const spawnInterval = Math.max(500, baseInterval - reduction); // Mínimo 500ms
+    const spawnInterval = Math.max(300, baseInterval - reduction); // Mínimo 300ms
     
     console.log(`🎮 SPAWN SYSTEM ACTIVE: Intervalo ${spawnInterval}ms | Oleada ${waveNumber}`);
     
@@ -408,17 +438,23 @@ const SaintSeiyaGame: React.FC = () => {
       const currentPlayer = playerRef.current;
       if (!currentPlayer) return;
       
-      // Sistema de oleadas progresivo
+      // Sistema de oleadas progresivo con más enemigos
       let availableTypes: Array<'normal' | 'fast' | 'tank'> = ['normal'];
       if (waveNumber >= 2) availableTypes.push('fast');
       if (waveNumber >= 3) availableTypes.push('tank');
       
-      const type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
+      // A partir de oleada 5, mezclar tipos
+      let type: 'normal' | 'fast' | 'tank';
+      if (waveNumber >= 5 && Math.random() < 0.3) {
+        // 30% de probabilidad de enemigo especial en oleadas altas
+        type = availableTypes[1 + Math.floor(Math.random() * (availableTypes.length - 1))]!;
+      } else {
+        type = availableTypes[Math.floor(Math.random() * availableTypes.length)]!;
+      }
       
       // Spawn en un ANILLO alrededor del jugador (350-500 píxeles de distancia)
-      // Esto asegura que los enemigos aparezcan justo fuera del viewport pero cerca
-      const spawnDistance = 350 + Math.random() * 150; // 350-500 píxeles del jugador
-      const angle = Math.random() * Math.PI * 2; // Ángulo aleatorio (0-360 grados)
+      const spawnDistance = 350 + Math.random() * 150;
+      const angle = Math.random() * Math.PI * 2;
       
       let x = currentPlayer.x + Math.cos(angle) * spawnDistance;
       let y = currentPlayer.y + Math.sin(angle) * spawnDistance;
@@ -440,7 +476,9 @@ const SaintSeiyaGame: React.FC = () => {
       };
       
       setSpawnWarnings(prev => {
-        const maxWarnings = Math.min(15 + (waveNumber * 3), 50);
+        // Límite dinámico basado en oleada
+        // Oleada 1: 3-5 enemigos, Oleada 2: 5-8, Oleada 3+: 8-15+
+        const maxWarnings = Math.min(3 + (waveNumber * 3), 50);
         if (prev.length >= maxWarnings) {
           console.log(`⏸️ Too many warnings: ${prev.length}`);
           return prev;
@@ -473,8 +511,10 @@ const SaintSeiyaGame: React.FC = () => {
       const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
       setStageTime(currentStageTime);
       
-      // Verificar si debe aparecer el jefe (3 minutos)
-      if (currentStageTime >= 180 && !boss) {
+      // Verificar si debe aparecer el jefe (cada 5 oleadas completadas, no por tiempo)
+      // Boss aparece al completar las oleadas 5, 10, 15, etc.
+      if (waveNumber > 0 && waveNumber % 5 === 0 && waveKills === 0 && !boss) {
+        console.log(`👑 Boss spawn! Completada oleada ${waveNumber}`);
         spawnBoss();
       }
       
@@ -483,12 +523,23 @@ const SaintSeiyaGame: React.FC = () => {
       const speedMultiplier = player.knight.speed + upgrades.speed * 0.5;
       const pixelsPerSecond = baseSpeed * speedMultiplier;
       
-      // Actualizar combo timer
+      // Actualizar combo timer y magnet duration
       setPlayer(p => {
         if (!p) return p;
         const newComboTimer = Math.max(0, p.comboTimer - deltaTime * 1000);
         const newCombo = newComboTimer <= 0 ? 0 : p.combo;
-        return { ...p, comboTimer: newComboTimer, combo: newCombo };
+        
+        // Actualizar magnet duration
+        const newMagnetDuration = Math.max(0, p.magnetDuration - deltaTime);
+        const newMagnetActive = newMagnetDuration > 0;
+        
+        return { 
+          ...p, 
+          comboTimer: newComboTimer, 
+          combo: newCombo,
+          magnetDuration: newMagnetDuration,
+          magnetActive: newMagnetActive
+        };
       });
       
       // Leer input y construir vector de dirección
@@ -537,27 +588,31 @@ const SaintSeiyaGame: React.FC = () => {
         
         prev.forEach(warning => {
           if (now >= warning.spawnTime) {
-            // Crear el enemigo con estadísticas balanceadas para survival
-            let health: number, maxHealth: number, speed: number, goldValue: number;
+            // Crear el enemigo con estadísticas balanceadas y escalado por oleada
+            let health: number, maxHealth: number, speed: number, cosmosValue: number;
+            
+            // Multiplicadores de oleada
+            const hpMultiplier = 1 + (waveNumber - 1) * 0.20; // +20% HP por oleada
+            const speedMultiplier = 1 + (waveNumber - 1) * 0.05; // +5% velocidad por oleada
             
             switch (warning.type) {
               case 'tank':
-                health = 40 + (waveNumber * 5); // Más resistente
+                health = Math.floor((40 + (waveNumber * 5)) * hpMultiplier);
                 maxHealth = health;
-                speed = 0.4; // Lento
-                goldValue = 15;
+                speed = 0.4 * speedMultiplier; // Lento pero escala
+                cosmosValue = 5 + Math.floor(Math.random() * 4); // 5-8 cosmos
                 break;
               case 'fast':
-                health = 15 + (waveNumber * 2); // Frágil
+                health = Math.floor((15 + (waveNumber * 2)) * hpMultiplier);
                 maxHealth = health;
-                speed = 1.2; // Muy rápido
-                goldValue = 8;
+                speed = 1.5 * speedMultiplier; // Muy rápido (incrementado de 1.2)
+                cosmosValue = 3 + Math.floor(Math.random() * 3); // 3-5 cosmos
                 break;
               default: // 'normal'
-                health = 25 + (waveNumber * 3);
+                health = Math.floor((25 + (waveNumber * 3)) * hpMultiplier);
                 maxHealth = health;
-                speed = 0.7; // Velocidad media
-                goldValue = 10;
+                speed = 0.8 * speedMultiplier; // Velocidad media (incrementado de 0.7)
+                cosmosValue = 2 + Math.floor(Math.random() * 3); // 2-4 cosmos
             }
             
             const enemy: Enemy = {
@@ -569,10 +624,10 @@ const SaintSeiyaGame: React.FC = () => {
               speed,
               type: warning.type,
               angle: 0,
-              goldValue
+              cosmosValue
             };
             
-            console.log(`🐛 SPAWNING ENEMY at (${Math.floor(enemy.x)}, ${Math.floor(enemy.y)}) type: ${enemy.type}`);
+            console.log(`🐛 SPAWNING ENEMY at (${Math.floor(enemy.x)}, ${Math.floor(enemy.y)}) type: ${enemy.type} | HP: ${enemy.health} | Speed: ${enemy.speed.toFixed(2)} | Cosmos: ${enemy.cosmosValue}`);
             setEnemies(e => [...e, enemy]);
             spawned++;
           } else {
@@ -615,23 +670,45 @@ const SaintSeiyaGame: React.FC = () => {
         });
       });
       
-      setExpOrbs(prev => prev.map(orb => {
-        const dist = Math.hypot(player.x - orb.x, player.y - orb.y);
-        if (dist < 100) {
-          const angle = Math.atan2(player.y - orb.y, player.x - orb.x);
+      // Actualizar drops y atraerlos si hay magnet activo o están cerca
+      setDrops(prev => prev.map(drop => {
+        // Radio de atracción
+        const attractRadius = player.magnetActive ? 400 : 100; // Magnet atrae desde 400px, normal 100px
+        const dist = Math.hypot(player.x - drop.x, player.y - drop.y);
+        
+        if (dist < attractRadius) {
+          const angle = Math.atan2(player.y - drop.y, player.x - drop.x);
+          const attractSpeed = player.magnetActive ? 6 : 3; // Magnet más rápido
           return {
-            ...orb,
-            x: orb.x + Math.cos(angle) * 3,
-            y: orb.y + Math.sin(angle) * 3
+            ...drop,
+            x: drop.x + Math.cos(angle) * attractSpeed,
+            y: drop.y + Math.sin(angle) * attractSpeed
           };
         }
-        return orb;
+        return drop;
       }));
       
-      setExpOrbs(prev => prev.filter(orb => {
-        if (Math.hypot(player.x - orb.x, player.y - orb.y) < 20) {
-          gainExp(orb.value);
-          return false;
+      // Recolectar drops
+      setDrops(prev => prev.filter(drop => {
+        if (Math.hypot(player.x - drop.x, player.y - drop.y) < 20) {
+          // Procesar el drop según tipo
+          if (drop.type === 'cosmos') {
+            gainCosmos(drop.value);
+          } else if (drop.type === 'health') {
+            // Recuperar vida
+            setPlayer(p => {
+              if (!p) return p;
+              const newHealth = Math.min(p.maxHealth, p.health + drop.value);
+              return { ...p, health: newHealth };
+            });
+          } else if (drop.type === 'magnet') {
+            // Activar efecto magnet
+            setPlayer(p => {
+              if (!p) return p;
+              return { ...p, magnetActive: true, magnetDuration: 5 }; // 5 segundos
+            });
+          }
+          return false; // Remover el drop
         }
         return true;
       }));
@@ -663,13 +740,9 @@ const SaintSeiyaGame: React.FC = () => {
                   if (!b) return b;
                   const newHealth = b.health - proj.damage;
                   if (newHealth <= 0) {
-                    dropExpOrb(b.x, b.y, 100);
+                    // Boss eliminado - dropear mucho cosmos
+                    dropItem(b.x, b.y, 'cosmos', 40 + Math.floor(Math.random() * 11)); // 40-50 cosmos
                     setScore(s => s + 1000);
-                    // Dar oro por derrotar jefe
-                    setPlayer(p => {
-                      if (!p) return p;
-                      return { ...p, gold: p.gold + 100 };
-                    });
                     setCurrentHouse(h => h + 1);
                     setWaveNumber(1); // Reiniciar oleadas para la siguiente casa
                     setWaveKills(0);
@@ -692,21 +765,30 @@ const SaintSeiyaGame: React.FC = () => {
                 if (Math.hypot(enemy.x - proj.x, enemy.y - proj.y) < 20) {
                   const newHealth = enemy.health - proj.damage;
                   if (newHealth <= 0) {
-                    dropExpOrb(enemy.x, enemy.y, 10);
-                    // Dropear oro
-                    setPlayer(p => {
-                      if (!p) return p;
-                      return { ...p, gold: p.gold + enemy.goldValue };
-                    });
+                    // Enemigo eliminado - dropear items
+                    
+                    // Siempre dropear cosmos
+                    dropItem(enemy.x, enemy.y, 'cosmos', enemy.cosmosValue);
+                    
+                    // 8% de probabilidad de health orb
+                    if (Math.random() < 0.08) {
+                      dropItem(enemy.x + (Math.random() - 0.5) * 20, enemy.y + (Math.random() - 0.5) * 20, 'health', 20);
+                    }
+                    
+                    // 3% de probabilidad de magnet orb
+                    if (Math.random() < 0.03) {
+                      dropItem(enemy.x + (Math.random() - 0.5) * 20, enemy.y + (Math.random() - 0.5) * 20, 'magnet', 1);
+                    }
+                    
                     setScore(s => s + 100);
                     setWaveKills(k => {
                       const newKills = k + 1;
-                      // Aumentar oleada cada 20 enemigos eliminados
-                      if (newKills % 20 === 0) {
+                      // Aumentar oleada cada 25 enemigos eliminados (no 20)
+                      if (newKills >= 25) {
                         setWaveNumber(w => w + 1);
                         console.log(`🌊 Nueva oleada: ${waveNumber + 1}`);
+                        return 0; // Reiniciar contador para la nueva oleada
                       }
-                      // El boss aparece solo por tiempo (3 minutos), no por kills
                       return newKills;
                     });
                     hit = true;
@@ -826,7 +908,7 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, gameState, keysPressed, shoot, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropExpOrb, gainExp, waveNumber]);
+  }, [gameStarted, player, gameState, keysPressed, shoot, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, dropItem, gainCosmos, waveNumber]);
 
   useEffect(() => {
     if (!canvasRef.current || !player) return;
@@ -938,7 +1020,8 @@ const SaintSeiyaGame: React.FC = () => {
           ctx.strokeStyle = warningColor;
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.arc(warning.x, warning.y, 20 - progress * 5, 0, Math.PI * 2);
+          const ringRadius = Math.max(5, 20 - progress * 5);
+          ctx.arc(warning.x, warning.y, ringRadius, 0, Math.PI * 2);
           ctx.stroke();
           
           // Símbolo de alerta (!)
@@ -954,8 +1037,30 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Dibujar jugador con sprite o fallback
         if (playerSprite) {
+          // Efecto de aura dorada si magnet está activo
+          if (player.magnetActive) {
+            const pulseSize = 80 + Math.sin(Date.now() / 200) * 10;
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, pulseSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+          
           playerSprite.draw(ctx, player.x, player.y, 64, 64);
         } else {
+          // Efecto de aura dorada si magnet está activo (fallback)
+          if (player.magnetActive) {
+            const pulseSize = 50 + Math.sin(Date.now() / 200) * 8;
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, pulseSize, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+          
           ctx.fillStyle = player.knight.color;
           ctx.beginPath();
           ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
@@ -1026,10 +1131,27 @@ const SaintSeiyaGame: React.FC = () => {
         // Dibujar efectos de ataque
         CombatSystem.drawAttackEffects(ctx);
         
-        expOrbs.forEach(orb => {
-          ctx.fillStyle = '#0FF';
+        // Dibujar drops (cosmos, health, magnet)
+        drops.forEach(drop => {
+          let color = '#0FF'; // Azul brillante para cosmos
+          let size = 5;
+          
+          if (drop.type === 'health') {
+            color = '#0F0'; // Verde para vida
+            size = 6;
+          } else if (drop.type === 'magnet') {
+            color = '#FFD700'; // Dorado para magnet
+            size = 7;
+            // Efecto de brillo para magnet
+            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+            ctx.beginPath();
+            ctx.arc(drop.x, drop.y, size + 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          
+          ctx.fillStyle = color;
           ctx.beginPath();
-          ctx.arc(orb.x, orb.y, 5, 0, Math.PI * 2);
+          ctx.arc(drop.x, drop.y, size, 0, Math.PI * 2);
           ctx.fill();
         });
         
@@ -1042,10 +1164,12 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillStyle = '#F00';
         ctx.fillRect(10, 10, 200 * (player.health / player.maxHealth), 20);
         
+        // Barra de Cosmos (reemplaza exp)
+        const cosmosRequired = Math.floor(100 * Math.pow(player.level, 1.5));
         ctx.fillStyle = '#00F';
         ctx.fillRect(10, 35, 200, 10);
         ctx.fillStyle = '#0FF';
-        ctx.fillRect(10, 35, 200 * (player.exp / player.expToNext), 10);
+        ctx.fillRect(10, 35, 200 * (player.cosmos / cosmosRequired), 10);
         
         ctx.fillStyle = '#FFF';
         ctx.font = '16px Arial';
@@ -1069,12 +1193,6 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px Arial';
         ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
-        
-        // Oro
-        ctx.fillStyle = '#FFD700';
-        ctx.font = 'bold 18px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(`💰 ${player.gold}`, WIDTH - 10, 25);
         
         // Combo
         if (player.combo > 0) {
@@ -1102,7 +1220,7 @@ const SaintSeiyaGame: React.FC = () => {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [player, enemies, boss, projectiles, expOrbs, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake]);
+  }, [player, enemies, boss, projectiles, drops, spawnWarnings, gameState, score, currentHouse, waveKills, waveEnemies, playerSprite, keysPressed, isAttacking, projectileImage, floorImage, camera, stageTime, waveNumber, screenShake]);
 
   if (!gameStarted) {
     return (

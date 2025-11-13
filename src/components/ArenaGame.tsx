@@ -97,7 +97,7 @@ const ArenaGame: React.FC = () => {
       stats: {
         maxHp: 100,
         currentHp: 100,
-        damage: 15,
+        damage: 12, // Reducido de 15 a 12
         speed: 200,
         attackRange: 150,
         attackSpeed: 2
@@ -106,10 +106,10 @@ const ArenaGame: React.FC = () => {
       attackCooldown: 0,
       experience: 0,
       level: 1,
-      cosmos: 0,
-      gold: 0,
-      gems: 0,
-      upgrades: []
+      cosmos: 0, // Sistema unificado de cosmos
+      upgrades: [],
+      magnetActive: false,
+      magnetDuration: 0
     };
 
     waveSystemRef.current.startNextWave();
@@ -222,14 +222,36 @@ const ArenaGame: React.FC = () => {
 
     state.enemies = state.enemies.filter(e => e.stats.currentHp > 0);
 
+    // Actualizar magnet duration
+    if (state.player.magnetActive) {
+      state.player.magnetDuration = Math.max(0, state.player.magnetDuration - deltaTime);
+      if (state.player.magnetDuration <= 0) {
+        state.player.magnetActive = false;
+      }
+    }
+
     state.drops = state.drops.filter(drop => {
       drop.lifetime -= deltaTime;
       if (drop.lifetime <= 0) return false;
 
       const distToPlayer = PhysicsSystem.distance(drop.position, state.player.position);
-      if (distToPlayer < 40) {
-        collectDrop(state, drop);
-        return false;
+      
+      // Atraer drops si magnet está activo o están cerca
+      const attractRadius = state.player.magnetActive ? 400 : 40;
+      if (distToPlayer < attractRadius) {
+        if (distToPlayer < 40) {
+          collectDrop(state, drop);
+          return false;
+        } else if (state.player.magnetActive) {
+          // Atraer hacia el jugador
+          const angle = Math.atan2(
+            state.player.position.y - drop.position.y,
+            state.player.position.x - drop.position.x
+          );
+          const attractSpeed = 300; // píxeles por segundo
+          drop.position.x += Math.cos(angle) * attractSpeed * deltaTime;
+          drop.position.y += Math.sin(angle) * attractSpeed * deltaTime;
+        }
       }
       return true;
     });
@@ -256,40 +278,76 @@ const ArenaGame: React.FC = () => {
   }
 
   function createDrops(state: GameState, enemy: Enemy) {
-    const dropCount = Math.floor(Math.random() * 3) + 1;
+    // Siempre dropear cosmos
+    const cosmosValue = 2 + Math.floor(Math.random() * 3); // 2-4 cosmos
+    const cosmosDrop: Drop = {
+      id: `drop_cosmos_${Date.now()}`,
+      type: 'cosmos',
+      position: {
+        x: enemy.position.x,
+        y: enemy.position.y
+      },
+      value: cosmosValue,
+      lifetime: 15
+    };
+    state.drops.push(cosmosDrop);
     
-    for (let i = 0; i < dropCount; i++) {
-      const dropType = Math.random() < 0.7 ? 'gold' : (Math.random() < 0.8 ? 'experience' : 'gem');
-      const drop: Drop = {
-        id: `drop_${Date.now()}_${i}`,
-        type: dropType,
+    // 8% probabilidad de health orb
+    if (Math.random() < 0.08) {
+      const healthDrop: Drop = {
+        id: `drop_health_${Date.now()}`,
+        type: 'health',
         position: {
-          x: enemy.position.x + (Math.random() - 0.5) * 40,
-          y: enemy.position.y + (Math.random() - 0.5) * 40
+          x: enemy.position.x + (Math.random() - 0.5) * 20,
+          y: enemy.position.y + (Math.random() - 0.5) * 20
         },
-        value: dropType === 'gold' ? Math.floor(enemy.rewardValue) : (dropType === 'gem' ? 1 : Math.floor(enemy.rewardValue / 3)),
-        lifetime: 10
+        value: 20,
+        lifetime: 8
       };
-      state.drops.push(drop);
+      state.drops.push(healthDrop);
+    }
+    
+    // 3% probabilidad de magnet orb
+    if (Math.random() < 0.03) {
+      const magnetDrop: Drop = {
+        id: `drop_magnet_${Date.now()}`,
+        type: 'magnet',
+        position: {
+          x: enemy.position.x + (Math.random() - 0.5) * 20,
+          y: enemy.position.y + (Math.random() - 0.5) * 20
+        },
+        value: 1,
+        lifetime: 8
+      };
+      state.drops.push(magnetDrop);
     }
   }
 
   function collectDrop(state: GameState, drop: Drop) {
     switch (drop.type) {
-      case 'gold':
-        state.player.gold += drop.value;
-        break;
-      case 'gem':
-        state.player.gems += drop.value;
-        break;
-      case 'experience':
-        const leveled = CombatSystem.addExperience(state.player, drop.value);
-        if (leveled) {
+      case 'cosmos':
+        // Ganar cosmos (funciona como experiencia)
+        const cosmosRequired = Math.floor(100 * Math.pow(state.player.level, 1.5));
+        state.player.cosmos += drop.value;
+        
+        // Verificar level up
+        if (state.player.cosmos >= cosmosRequired) {
+          state.player.cosmos -= cosmosRequired;
+          state.player.level++;
           triggerLevelUp(state);
         }
         break;
-      case 'cosmos':
-        state.player.cosmos = Math.min(100, state.player.cosmos + drop.value);
+      case 'health':
+        // Recuperar vida
+        state.player.stats.currentHp = Math.min(
+          state.player.stats.maxHp,
+          state.player.stats.currentHp + drop.value
+        );
+        break;
+      case 'magnet':
+        // Activar efecto magnet
+        state.player.magnetActive = true;
+        state.player.magnetDuration = 5; // 5 segundos
         break;
     }
   }
@@ -332,15 +390,29 @@ const ArenaGame: React.FC = () => {
 
     state.drops.forEach(drop => {
       const colors = {
-        gold: '#ffd700',
-        gem: '#ff6b9d',
-        experience: '#4ecdc4',
-        cosmos: '#95e1d3'
+        cosmos: '#00bcd4', // Azul brillante
+        health: '#0F0', // Verde
+        magnet: '#FFD700' // Dorado
       };
-      ctx.fillStyle = colors[drop.type];
+      
+      const sizes = {
+        cosmos: 5,
+        health: 6,
+        magnet: 7
+      };
+      
+      ctx.fillStyle = colors[drop.type] || '#fff';
       ctx.beginPath();
-      ctx.arc(drop.position.x, drop.position.y, 6, 0, Math.PI * 2);
+      ctx.arc(drop.position.x, drop.position.y, sizes[drop.type] || 5, 0, Math.PI * 2);
       ctx.fill();
+      
+      // Efecto extra para magnet
+      if (drop.type === 'magnet') {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(drop.position.x, drop.position.y, sizes[drop.type] + 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
 
     state.enemies.forEach(enemy => {
@@ -380,11 +452,33 @@ const ArenaGame: React.FC = () => {
 
     // Draw player
     if (playerSpriteRef.current && playerSpriteRef.current.getCurrentFrame()) {
+      // Efecto de aura dorada si magnet está activo
+      if (state.player.magnetActive) {
+        const pulseSize = 80 + Math.sin(Date.now() / 200) * 10;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(state.player.position.x, state.player.position.y, pulseSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      
       const spriteWidth = state.player.size * 3;
       const spriteHeight = state.player.size * 3;
       playerSpriteRef.current.draw(ctx, state.player.position.x, state.player.position.y, spriteWidth, spriteHeight);
     } else {
       // Fallback: dibujar círculo si no hay sprite
+      // Efecto de aura dorada si magnet está activo
+      if (state.player.magnetActive) {
+        const pulseSize = 50 + Math.sin(Date.now() / 200) * 8;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(state.player.position.x, state.player.position.y, pulseSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      
       ctx.fillStyle = state.player.isAttacking ? '#ffd700' : '#3498db';
       ctx.beginPath();
       ctx.arc(state.player.position.x, state.player.position.y, state.player.size, 0, Math.PI * 2);
@@ -427,7 +521,11 @@ const ArenaGame: React.FC = () => {
         style={{ border: '2px solid #0f3460', display: 'block' }}
       />
       
-      <GameHUD gameState={gameState} />
+      <GameHUD 
+        gameState={gameState} 
+        enemiesOnScreen={gameState.enemies.length}
+        waveProgress={0} // TODO: implementar tracking de progreso
+      />
       
       {gameState.showLevelUp && (
         <LevelUpMenu
@@ -450,7 +548,7 @@ const ArenaGame: React.FC = () => {
         }}>
           <h1 style={{ color: '#ff4757', marginBottom: '20px' }}>GAME OVER</h1>
           <p style={{ fontSize: '18px', marginBottom: '10px' }}>Oleada alcanzada: {gameState.wave}</p>
-          <p style={{ fontSize: '18px', marginBottom: '10px' }}>Oro total: {gameState.player.gold}</p>
+          <p style={{ fontSize: '18px', marginBottom: '10px' }}>Cosmos acumulado: {Math.floor(gameState.player.cosmos)}</p>
           <p style={{ fontSize: '18px', marginBottom: '30px' }}>Nivel: {gameState.player.level}</p>
           <button
             onClick={handleRestart}

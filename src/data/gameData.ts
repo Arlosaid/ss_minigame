@@ -35,7 +35,7 @@ export const BRONZE_KNIGHTS: Knight[] = [
     attack: 'Meteoros de Pegaso',
     speed: 3,
     fireRate: 1500,
-    damage: 10
+    damage: 12
   },
   {
     id: 'dragon',
@@ -45,7 +45,7 @@ export const BRONZE_KNIGHTS: Knight[] = [
     attack: 'Cólera del Dragón',
     speed: 2.5,
     fireRate: 1800,
-    damage: 20
+    damage: 15
   },
   {
     id: 'cisne',
@@ -55,7 +55,7 @@ export const BRONZE_KNIGHTS: Knight[] = [
     attack: 'Polvo de Diamante',
     speed: 2.8,
     fireRate: 1600,
-    damage: 15
+    damage: 12
   }
 ];
 
@@ -75,12 +75,13 @@ export const GOLD_SAINTS: GoldSaint[] = [
   { name: 'Afrodita de Piscis', house: 'Piscis', color: '#FF69B4', attack: 'Rosas Diabólicas' }
 ];
 
-// Mejoras
+// Mejoras con bonos mejorados
 export const UPGRADES: Upgrade[] = [
-  { id: 'damage', name: 'Cosmos Aumentado', desc: 'Aumenta el daño', icon: '⚡', levels: [15, 30, 50, 75, 100] },
-  { id: 'speed', name: 'Velocidad Divina', desc: 'Aumenta velocidad de movimiento', icon: '💨', levels: [0.5, 1.0, 1.5, 2.0, 2.5] },
-  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Dispara más rápido', icon: '🔥', levels: [150, 280, 420, 580, 750] },
+  { id: 'damage', name: 'Cosmos Aumentado', desc: '+20% Daño por nivel', icon: '⚡', levels: [20, 40, 65, 95, 130] },
+  { id: 'speed', name: 'Velocidad Divina', desc: '+25% Velocidad por nivel', icon: '💨', levels: [0.75, 1.5, 2.3, 3.2, 4.0] },
+  { id: 'fireRate', name: 'Ráfaga Cósmica', desc: 'Dispara más rápido', icon: '🔥', levels: [180, 340, 510, 700, 900] },
   { id: 'multiShot', name: 'Meteoros Múltiples', desc: 'Dispara proyectiles adicionales', icon: '✨', levels: [1, 2, 3, 4, 5] },
-  { id: 'pierce', name: 'Penetración Cósmica', desc: 'Los proyectiles atraviesan enemigos', icon: '🎯', levels: [1, 2, 3, 4, 5] },
+  { id: 'pierce', name: 'Penetración Cósmica', desc: '+30% Rango por nivel', icon: '🎯', levels: [1, 2, 3, 4, 5] },
+  { id: 'maxHealth', name: 'Armadura Divina', desc: '+75 HP Máximo por nivel', icon: '💚', levels: [75, 150, 225, 300, 375] },
   { id: 'explosion', name: 'Explosión de Cosmos', desc: 'Área de daño al impactar', icon: '💥', levels: [30, 50, 80, 120, 150] }
 ];

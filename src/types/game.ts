@@ -37,10 +37,10 @@ export interface Player extends Entity {
   type: 'player';
   experience: number;
   level: number;
-  cosmos: number; // barra especial
-  gold: number;
-  gems: number;
+  cosmos: number; // Energía Cósmica (reemplaza al oro)
   upgrades: Upgrade[];
+  magnetActive: boolean; // Estado del efecto magnético
+  magnetDuration: number; // Duración restante del magnet
 }
 
 export type EnemyType = 'melee' | 'ranged' | 'tank' | 'fast' | 'miniboss' | 'boss';
@@ -58,7 +58,7 @@ export interface Upgrade {
 
 export interface Drop {
   id: string;
-  type: 'gold' | 'cosmos' | 'gem' | 'experience';
+  type: 'cosmos' | 'health' | 'magnet'; // Eliminado gold y gem, añadido health y magnet
   position: Vector2D;
   value: number;
   lifetime: number;
@@ -92,7 +92,7 @@ export interface PermanentUpgrade {
   name: string;
   description: string;
   cost: number;
-  currency: 'gold' | 'gems';
+  currency: 'cosmos'; // Solo cosmos ahora
   maxLevel: number;
   currentLevel: number;
   effect: (level: number) => number;

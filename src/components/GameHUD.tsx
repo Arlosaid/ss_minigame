@@ -3,20 +3,27 @@ import { GameState } from '../types/game';
 
 interface Props {
   gameState: GameState;
+  enemiesOnScreen: number; // Nuevo: contador de enemigos en pantalla
+  waveProgress: number; // Nuevo: progreso de la oleada (0-25)
 }
 
-const GameHUD: React.FC<Props> = ({ gameState }) => {
+const GameHUD: React.FC<Props> = ({ gameState, enemiesOnScreen, waveProgress }) => {
   const { player, wave, gameTime } = gameState;
   
   const hpPercent = (player.stats.currentHp / player.stats.maxHp) * 100;
-  const expPercent = (player.experience / CombatSystem.calculateExperienceForLevel(player.level)) * 100;
-  const cosmosPercent = player.cosmos;
+  
+  // Calcular requisito de cosmos para siguiente nivel usando fórmula: 100 * (nivel^1.5)
+  const cosmosRequired = Math.floor(100 * Math.pow(player.level, 1.5));
+  const cosmosPercent = (player.cosmos / cosmosRequired) * 100;
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+  
+  // Efecto de peligro cuando hay muchos enemigos cerca
+  const isDangerous = enemiesOnScreen > 10;
 
   return (
     <div style={{
@@ -27,6 +34,33 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
       padding: '20px',
       pointerEvents: 'none'
     }}>
+      {/* Efecto de peligro - borde rojo pulsante */}
+      {isDangerous && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          border: '5px solid rgba(255, 0, 0, 0.6)',
+          animation: 'pulse 0.5s infinite',
+          pointerEvents: 'none',
+          zIndex: 1000
+        }} />
+      )}
+      
+      {/* Estilos para animaciones */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.8; }
+        }
+        @keyframes magnetGlow {
+          0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+          50% { box-shadow: 0 0 25px rgba(255, 215, 0, 1); }
+        }
+      `}</style>
+
       {/* HP Bar */}
       <div style={{ marginBottom: '10px' }}>
         <div style={{
@@ -55,7 +89,7 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
         </div>
       </div>
 
-      {/* XP Bar */}
+      {/* Cosmos/Energía Cósmica Bar (reemplaza XP) */}
       <div style={{ marginBottom: '10px' }}>
         <div style={{
           background: 'rgba(0, 0, 0, 0.7)',
@@ -63,8 +97,8 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
           borderRadius: '5px',
           display: 'inline-block'
         }}>
-          <div style={{ color: '#fff', fontSize: '14px', marginBottom: '3px' }}>
-            Nivel {player.level} - XP: {Math.floor(player.experience)}
+          <div style={{ color: '#4dd0e1', fontSize: '14px', marginBottom: '3px' }}>
+            ⚡ Nivel {player.level} - Cosmos: {Math.floor(player.cosmos)}/{cosmosRequired}
           </div>
           <div style={{
             width: '300px',
@@ -74,42 +108,32 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
             overflow: 'hidden'
           }}>
             <div style={{
-              width: `${expPercent}%`,
+              width: `${cosmosPercent}%`,
               height: '100%',
-              background: `linear-gradient(90deg, #3498db, #2980b9)`,
-              transition: 'width 0.3s'
+              background: `linear-gradient(90deg, #00bcd4, #0097a7)`,
+              transition: 'width 0.3s',
+              boxShadow: '0 0 10px rgba(0, 188, 212, 0.5)'
             }} />
           </div>
         </div>
       </div>
 
-      {/* Cosmos Bar */}
-      <div style={{ marginBottom: '10px' }}>
+      {/* Indicador de Magnet Activo */}
+      {player.magnetActive && (
         <div style={{
-          background: 'rgba(0, 0, 0, 0.7)',
-          padding: '5px 10px',
-          borderRadius: '5px',
-          display: 'inline-block'
+          background: 'rgba(255, 215, 0, 0.8)',
+          padding: '8px 15px',
+          borderRadius: '8px',
+          display: 'inline-block',
+          marginBottom: '10px',
+          animation: 'magnetGlow 1s infinite',
+          color: '#000',
+          fontWeight: 'bold',
+          fontSize: '14px'
         }}>
-          <div style={{ color: '#fff', fontSize: '14px', marginBottom: '3px' }}>
-            Cosmos: {Math.floor(cosmosPercent)}%
-          </div>
-          <div style={{
-            width: '300px',
-            height: '12px',
-            background: '#333',
-            borderRadius: '6px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              width: `${cosmosPercent}%`,
-              height: '100%',
-              background: `linear-gradient(90deg, #f39c12, #e67e22)`,
-              transition: 'width 0.3s'
-            }} />
-          </div>
+          🧲 MAGNET ACTIVO ({Math.ceil(player.magnetDuration)}s)
         </div>
-      </div>
+      )}
 
       {/* Stats Panel */}
       <div style={{
@@ -122,12 +146,20 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
         color: '#fff',
         fontSize: '14px'
       }}>
-        <div style={{ marginBottom: '8px', fontSize: '16px', fontWeight: 'bold', color: '#ffd700' }}>
-          Oleada {wave}
+        <div style={{ marginBottom: '8px', fontSize: '18px', fontWeight: 'bold', color: '#ffd700' }}>
+          🌊 Oleada {wave}
+        </div>
+        <div style={{ marginBottom: '5px', fontSize: '16px', color: '#4dd0e1' }}>
+          Progreso: {waveProgress}/25 enemigos
+        </div>
+        <div style={{ 
+          marginBottom: '8px', 
+          color: enemiesOnScreen > 10 ? '#ff5252' : '#95e1d3',
+          fontWeight: enemiesOnScreen > 10 ? 'bold' : 'normal'
+        }}>
+          👹 En pantalla: {enemiesOnScreen}
         </div>
         <div style={{ marginBottom: '5px' }}>⏱️ Tiempo: {formatTime(gameTime)}</div>
-        <div style={{ marginBottom: '5px' }}>💰 Oro: {player.gold}</div>
-        <div style={{ marginBottom: '5px' }}>💎 Gemas: {player.gems}</div>
         <div style={{ marginBottom: '5px', color: '#95e1d3' }}>
           ⚔️ Daño: {Math.floor(player.stats.damage)}
         </div>
@@ -152,12 +184,10 @@ const GameHUD: React.FC<Props> = ({ gameState }) => {
       }}>
         <div>WASD / Flechas - Mover</div>
         <div>Ataque Automático</div>
+        <div style={{ color: '#4dd0e1', marginTop: '5px' }}>🔵 Cosmos | 💚 Vida | 🟡 Magnet</div>
       </div>
     </div>
   );
 };
-
-// Import necesario
-import { CombatSystem } from '../systems/CombatSystem';
 
 export default GameHUD;
