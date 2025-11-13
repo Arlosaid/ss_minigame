@@ -1,8 +1,8 @@
-# 📁 Estructura de Assets
+# Estructura de Assets
 
 Esta carpeta contiene todos los recursos del juego organizados según las mejores prácticas.
 
-## 🗂️ Estructura
+## Estructura
 
 ```
 assets/
@@ -47,7 +47,7 @@ assets/
         └── floor_1_stage.png
 ```
 
-## 📝 Convenciones de Nomenclatura
+## Convenciones de Nomenclatura
 
 ### Audio
 - **BGM (Background Music)**: `[ubicacion].mp3` (ej: `menu.mp3`, `battle.mp3`)
@@ -67,7 +67,7 @@ assets/
 - **Backgrounds**: `[ubicacion].jpg/png`
   - Ejemplo: `main.jpg`, `credits.png`
 
-## 🎯 Mejores Prácticas
+## Mejores Prácticas
 
 1. **Organización por Tipo**: Separar audio, imágenes y sprites
 2. **Subcategorías Claras**: Cada tipo tiene su propia subcarpeta lógica
@@ -77,7 +77,7 @@ assets/
    - PNG para sprites (transparencia)
    - MP3 para audio (buen balance calidad/tamaño)
 
-## 🔄 Agregar Nuevos Assets
+## Agregar Nuevos Assets
 
 ### Nuevo Personaje
 ```
@@ -97,7 +97,7 @@ assets/audio/bgm/[nombre].mp3
 assets/images/backgrounds/[nombre].jpg
 ```
 
-## ⚠️ Notas Importantes
+## Notas Importantes
 
 - Todos los paths en el código usan `import.meta.env.BASE_URL` para compatibilidad con GitHub Pages
 - La carpeta `public/` se copia tal cual al build de Vite
