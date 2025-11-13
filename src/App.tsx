@@ -13,7 +13,7 @@ const App: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'center',
         minHeight: '100vh',
-        backgroundImage: 'url(/sprites/Backgrounds/main.jpg)',
+        backgroundImage: `url(${import.meta.env.BASE_URL}assets/images/backgrounds/main.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -120,7 +120,7 @@ const App: React.FC = () => {
                 e.currentTarget.style.transform = 'translateY(-5px) scale(1.05)';
               }}
             >
-              ⚔️ Iniciar
+              Iniciar
             </button>
 
             {/* Botón Salir */}
@@ -162,7 +162,7 @@ const App: React.FC = () => {
                 e.currentTarget.style.transform = 'translateY(-3px)';
               }}
             >
-              🚪 Salir
+              Salir
             </button>
           </div>
 
