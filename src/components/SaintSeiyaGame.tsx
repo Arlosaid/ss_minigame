@@ -155,22 +155,16 @@ const SaintSeiyaGame: React.FC = () => {
   const [mobileDirection, setMobileDirection] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const [score, setScore] = useState(0);
-  const [lastShot, setLastShot] = useState(0);
   const [currentHouse, setCurrentHouse] = useState(0);
   const [waveEnemies, setWaveEnemies] = useState(0);
   const [waveKills, setWaveKills] = useState(0);
   const [gameState, setGameState] = useState<'playing' | 'levelup' | 'houseclear' | 'gameover'>('playing');
   
-  // Debug: monitorear cambios de gameState
-  useEffect(() => {
-    console.log('🎯 GameState cambió a:', gameState);
-  }, [gameState]);
-  
   const [upgrades, setUpgrades] = useState<PlayerUpgrades>({
     damage: 0,
     speed: 0,
     fireRate: 0,
-    multiShot: 0,
+    multiShot: 0, // 0 = 1 proyectil base, 1 = 2 proyectiles, 2 = 3 proyectiles, etc.
     maxHealth: 0,
     explosion: 0,
     lightning: 0,
@@ -196,7 +190,7 @@ const SaintSeiyaGame: React.FC = () => {
   const [canvasWidth, setCanvasWidth] = useState(WIDTH);
   const [canvasHeight, setCanvasHeight] = useState(HEIGHT);
   const [isPortrait, setIsPortrait] = useState(false); // Detectar orientación portrait
-  const stageStartTime = useRef<number>(0);
+  const stageStartTime = useRef<number>(Date.now());
   const backgroundMusic = useRef<HTMLAudioElement | null>(null);
   const playerRef = useRef<Player | null>(null);
   const bossRef = useRef<Boss | null>(null);
@@ -208,6 +202,7 @@ const SaintSeiyaGame: React.FC = () => {
   const lastCleanupTime = useRef<number>(0);
   const lastLightningTrigger = useRef<number>(0);
   const lastGoldenArrowTrigger = useRef<number>(0);
+  const lastShotRef = useRef<number>(0); // Usar ref para evitar race condition
   
   // Refs adicionales para acceso en gameLoop
   const keysRef = useRef<Set<string>>(new Set());
@@ -244,7 +239,6 @@ const SaintSeiyaGame: React.FC = () => {
   
   // Mantener refs actualizados para acceso rápido
   useEffect(() => {
-    console.log('🔄 playerRef actualizado:', player);
     playerRef.current = player;
   }, [player]);
   
@@ -339,7 +333,6 @@ const SaintSeiyaGame: React.FC = () => {
   }, [gameState]);
 
   const initializeGame = useCallback(async () => {
-    console.log('🚀 initializeGame() iniciando...');
     setIsInitializing(true); // Marcar que estamos inicializando
     
     // Usar el primer caballero por defecto (Seiya)
@@ -357,9 +350,7 @@ const SaintSeiyaGame: React.FC = () => {
       level: PLAYER_CONFIG.STARTING_LEVEL
     };
     
-    console.log('👤 Creando jugador:', newPlayer);
     setPlayer(newPlayer);
-    console.log('✅ setPlayer() llamado');
     
     // Inicializar cámara centrada en el jugador
     const camX = Math.max(0, Math.min(MAP_WIDTH - WIDTH, initialX - WIDTH / 2));
@@ -373,7 +364,6 @@ const SaintSeiyaGame: React.FC = () => {
     setStageTime(0);
     setWaveNumber(1);
     stageStartTime.current = Date.now();
-    console.log('✅ Estado del juego establecido a: playing');
     
     // Inicializar música de fondo
     if (!backgroundMusic.current) {
@@ -448,11 +438,9 @@ const SaintSeiyaGame: React.FC = () => {
       floorImg.src = `${import.meta.env.BASE_URL}assets/sprites/stages/floor_1_stage.png`;
       
       // ✅ Marcar inicialización completa DESPUÉS de cargar sprites críticos
-      console.log('✅ Sprites cargados, iniciando juego');
       setIsInitializing(false);
     } catch (error) {
       // Error silencioso al cargar sprites, pero igual iniciar el juego
-      console.warn('⚠️ Error cargando sprites, iniciando de todas formas:', error);
       setIsInitializing(false);
     }
   }, []);
@@ -533,10 +521,10 @@ const SaintSeiyaGame: React.FC = () => {
     
     const now = Date.now();
     const cooldownTime = calculateFireRate(upgrades.fireRate);
-    const timeSinceLastShot = now - lastShot;
+    const timeSinceLastShot = now - lastShotRef.current;
     if (timeSinceLastShot < cooldownTime) return;
     
-    setLastShot(now);
+    lastShotRef.current = now;
     
     // Encontrar el enemigo más cercano usando el CombatSystem
     const nearestEnemy = CombatSystem.findNearestEnemy(
@@ -600,10 +588,10 @@ const SaintSeiyaGame: React.FC = () => {
     }
     
     setProjectiles(prev => [...prev, ...newProjectiles]);
-  }, [gameState, lastShot, upgrades]);
+  }, [gameState, upgrades]);
 
   const gainCosmos = useCallback((amount: number) => {
-    if (!player) return;
+    if (!playerRef.current) return;
     
     setPlayer(prev => {
       if (!prev) return prev;
@@ -619,7 +607,7 @@ const SaintSeiyaGame: React.FC = () => {
         cosmosRequired = calculateCosmosRequired(newLevel);
         
         const choices: Upgrade[] = [];
-        const currentUpgrades = upgrades;
+        const currentUpgrades = upgradesRef.current;
         
         // Priorizar habilidades nuevas (lightning, goldenArrow, athenaShield)
         const powerUpgrades = UPGRADES.filter(u => 
@@ -662,7 +650,7 @@ const SaintSeiyaGame: React.FC = () => {
         level: newLevel
       };
     });
-  }, [player]);
+  }, []);
 
   const selectUpgrade = (upgradeId: string) => {
     setUpgrades(prev => {
@@ -842,15 +830,12 @@ const SaintSeiyaGame: React.FC = () => {
   }, [gameStarted, gameState, waveNumber, boss]);
 
   useEffect(() => {
-    console.log('🎬 useEffect del gameLoop ejecutándose - Iniciando loop');
     // ✅ SIEMPRE correr el gameLoop para renderizar continuamente
     let animationFrameId: number;
     let lastTime = performance.now();
     
     const gameLoop = (currentTime: number) => {
-      console.log('🎮 gameLoop ejecutándose, timestamp:', currentTime);
       const currentPlayer = playerRef.current;
-      console.log('👤 gameLoop - currentPlayer:', currentPlayer);
       
       // ⚡ SIEMPRE llamar a requestAnimationFrame para mantener el loop activo
       animationFrameId = requestAnimationFrame(gameLoop);
@@ -882,6 +867,7 @@ const SaintSeiyaGame: React.FC = () => {
       // Solo actualizar lógica del juego si hay jugador y está en estado 'playing'
       if (currentPlayer) {
         const shouldUpdateLogic = gameStartedRef.current && gameStateRef.current === 'playing';
+        
         // ===== INICIO DE LA LÓGICA DEL JUEGO =====
         
         // Capturar estados actuales al inicio del frame
@@ -889,12 +875,12 @@ const SaintSeiyaGame: React.FC = () => {
         const currentEnemies = enemiesRef.current;
         const currentBoss = bossRef.current;
       
-        if (shouldUpdateLogic) {
-      // Actualizar timer del stage
-      const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
-      setStageTime(currentStageTime);
-      stageTimeRef.current = currentStageTime;
+        // ===== ACTUALIZAR TIMER DEL STAGE (SIEMPRE, INCLUSO EN LEVEL UP) =====
+        const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
+        setStageTime(currentStageTime);
+        stageTimeRef.current = currentStageTime;
       
+        if (shouldUpdateLogic) {
       // Verificar si debe aparecer el jefe
       if (currentStageTime >= BOSS_CONFIG.SPAWN_TIME && !bossRef.current) {
         spawnBoss();
@@ -938,7 +924,7 @@ const SaintSeiyaGame: React.FC = () => {
       
       let projectilesToAdd: Projectile[] = [];
       
-      if (nowShoot - lastShot >= cooldownTime && currentProjectiles.length < PLAYER_CONFIG.MAX_PROJECTILES) {
+      if (nowShoot - lastShotRef.current >= cooldownTime && currentProjectiles.length < PLAYER_CONFIG.MAX_PROJECTILES) {
         // Encontrar el enemigo más cercano
         const nearestEnemy = CombatSystem.findNearestEnemy(
           { x: currentPlayer.x, y: currentPlayer.y },
@@ -963,7 +949,7 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Si hay objetivo, disparar
         if (target) {
-          setLastShot(nowShoot);
+          lastShotRef.current = nowShoot; // Actualizar ref inmediatamente
           
           // Crear efecto visual de ataque
           CombatSystem.createAttackEffect({ x: currentPlayer.x, y: currentPlayer.y }, target);
@@ -972,12 +958,15 @@ const SaintSeiyaGame: React.FC = () => {
           setIsAttacking(true);
           setTimeout(() => setIsAttacking(false), 200);
           
+          // Solo disparar UN proyectil base, más proyectiles adicionales según multiShot
           const shots = 1 + currentUpgrades.multiShot;
           
           // Calcular ángulo base hacia el objetivo
           const baseAngle = Math.atan2(target.y - currentPlayer.y, target.x - currentPlayer.x);
           
+          // Disparar proyectiles con spread solo si multiShot > 0
           for (let i = 0; i < shots; i++) {
+            // Sin spread si solo hay 1 disparo, con spread si hay múltiples
             const angle = shots === 1 ? baseAngle : baseAngle + (i - (shots - 1) / 2) * 0.2;
             const offsetDistance = 25;
             const startX = currentPlayer.x + Math.cos(angle) * offsetDistance;
@@ -1357,16 +1346,16 @@ const SaintSeiyaGame: React.FC = () => {
         } else {
           // Proyectil del jugador vs enemigos
           for (const enemy of movedEnemies) {
-            if (!enemiesAlive.has(enemy.id)) continue;
+            if (!enemiesAlive.has(enemy.id)) continue; // Saltar enemigos ya muertos
             
             const dist = Math.hypot(enemy.x - proj.x, enemy.y - proj.y);
             if (dist < PROJECTILE_CONFIG.PLAYER_PROJECTILE_HIT_RADIUS) {
-              projectileHit = true;
+              projectileHit = true; // Proyectil se destruye al impactar a UN SOLO enemigo
               const newHealth = enemy.health - proj.damage;
               enemy.health = newHealth;
               
               if (newHealth <= 0) {
-                // Marcar enemigo como muerto
+                // Marcar enemigo como muerto INMEDIATAMENTE
                 enemiesAlive.delete(enemy.id);
                 
                 // Crear drop solo cuando muere
@@ -1384,9 +1373,16 @@ const SaintSeiyaGame: React.FC = () => {
                 addScore += 100;
                 addKills += 1;
               }
+              // IMPORTANTE: Salir del loop inmediatamente después del primer impacto
+              // para que este proyectil no impacte múltiples enemigos
               break;
             }
+            
+            // Salir del loop si el proyectil ya impactó
+            if (projectileHit) break;
           }
+          
+          // Solo verificar colisión con boss si NO impactó un enemigo
           
           // Proyectil del jugador vs boss
           if (!projectileHit && currentBoss) {
@@ -1450,6 +1446,7 @@ const SaintSeiyaGame: React.FC = () => {
       // Actualizar estados AL FINAL DEL FRAME
       setProjectiles(projectilesToKeep);
       projectilesRef.current = projectilesToKeep;
+      
       setEnemies(enemiesToKeep);
       enemiesRef.current = enemiesToKeep;
       
@@ -2003,22 +2000,20 @@ const SaintSeiyaGame: React.FC = () => {
         
         const currentProjectiles = projectilesRef.current;
         currentProjectiles.forEach(proj => {
-          // ⚡ Trail visual eficiente para proyectiles del jugador (tipo Vampire Survivors)
+          // ⚡ Trail visual REDUCIDO para proyectiles del jugador (menos confuso)
           const currentProjectileImage = projectileImageRef.current;
           if (!proj.isEnemy && currentProjectileImage && currentProjectileImage.complete) {
             ctx.imageSmoothingEnabled = false;
             const displaySize = 24;
             
-            // Trail de 2 círculos (optimizado, no impacta rendimiento)
-            ctx.globalAlpha = 0.3;
+            // Trail de solo 1 círculo (reducido para evitar confusión visual)
+            ctx.globalAlpha = 0.2;
             ctx.fillStyle = proj.color;
-            for (let i = 1; i <= 2; i++) {
-              const trailX = proj.x - proj.dx * i * 3;
-              const trailY = proj.y - proj.dy * i * 3;
-              ctx.beginPath();
-              ctx.arc(trailX, trailY, (3 - i) * 2, 0, Math.PI * 2);
-              ctx.fill();
-            }
+            const trailX = proj.x - proj.dx * 2;
+            const trailY = proj.y - proj.dy * 2;
+            ctx.beginPath();
+            ctx.arc(trailX, trailY, 3, 0, Math.PI * 2);
+            ctx.fill();
             ctx.globalAlpha = 1;
             
             // Proyectil principal
@@ -2294,7 +2289,7 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Barra de Cosmos (reemplaza exp)
-        const cosmosRequired = 10 + ((currentPlayerForRender.level - 1) * 5);
+        const cosmosRequired = calculateCosmosRequired(currentPlayerForRender.level);
         ctx.fillStyle = '#00F';
         ctx.fillRect(10, 35, 200, 10);
         ctx.fillStyle = '#0FF';
@@ -2309,10 +2304,11 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillText(`Enemigos eliminados: ${waveKills}`, 10, 75);
         ctx.fillText(`Enemigos activos: ${enemiesRef.current.length}`, 10, 90);
         
-        // Timer del stage con indicador de boss
-        const minutes = Math.floor(stageTime / 60);
-        const seconds = stageTime % 60;
-        const timeUntilBoss = Math.max(0, BOSS_CONFIG.SPAWN_TIME - stageTime);
+        // Timer del stage con indicador de boss (usar ref para valor actualizado)
+        const currentStageTimeForRender = stageTimeRef.current;
+        const minutes = Math.floor(currentStageTimeForRender / 60);
+        const seconds = currentStageTimeForRender % 60;
+        const timeUntilBoss = Math.max(0, BOSS_CONFIG.SPAWN_TIME - currentStageTimeForRender);
         const minutesUntilBoss = Math.floor(timeUntilBoss / 60);
         const secondsUntilBoss = Math.floor(timeUntilBoss % 60);
         
@@ -2353,12 +2349,9 @@ const SaintSeiyaGame: React.FC = () => {
     };
     
     // Iniciar el loop unificado
-    console.log('🚀 Iniciando animationFrame con gameLoop');
     animationFrameId = requestAnimationFrame(gameLoop);
-    console.log('✅ requestAnimationFrame llamado, ID:', animationFrameId);
     
     return () => {
-      console.log('🧹 Limpiando gameLoop, cancelando animationFrame:', animationFrameId);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -2367,22 +2360,15 @@ const SaintSeiyaGame: React.FC = () => {
 
   // Inicializar el juego automáticamente cuando se monta el componente
   useEffect(() => {
-    console.log('🔍 useEffect initializeGame - gameStarted:', gameStarted, 'player:', player, 'canvas:', canvasRef.current);
     if (gameStarted && !player) {
-      console.log('✅ Condiciones cumplidas, llamando a initializeGame en 50ms');
       // Usar setTimeout para asegurar que el canvas esté montado en el DOM
       const timeoutId = setTimeout(() => {
         if (canvasRef.current) {
-          console.log('🎮 Llamando a initializeGame()');
           initializeGame();
-        } else {
-          console.error('❌ Canvas no está montado');
         }
       }, 50);
       
       return () => clearTimeout(timeoutId);
-    } else {
-      console.log('⚠️ No se llama a initializeGame - gameStarted:', gameStarted, 'player existe:', !!player);
     }
   }, [gameStarted, player, initializeGame]);
 
