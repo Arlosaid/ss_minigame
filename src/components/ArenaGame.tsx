@@ -14,9 +14,9 @@ const ARENA_HEIGHT = 800;
 
 const ArenaGame: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const waveSystemRef = useRef<WaveSystem>(new WaveSystem(ARENA_WIDTH, ARENA_HEIGHT));
   const [gameState, setGameState] = useState<GameState>(createInitialGameState());
   const gameStateRef = useRef<GameState>(gameState);
-  const waveSystemRef = useRef<WaveSystem>(new WaveSystem(ARENA_WIDTH, ARENA_HEIGHT));
   const inputRef = useRef({ x: 0, y: 0 });
   const keysRef = useRef<Set<string>>(new Set());
   const playerSpriteRef = useRef<AnimatedSprite | null>(null);
@@ -116,6 +116,7 @@ const ArenaGame: React.FC = () => {
       projectiles: [],
       drops: [],
       wave: 1,
+      enemiesKilled: 0,
       gameTime: 0,
       isPaused: false,
       isGameOver: false,
@@ -126,7 +127,13 @@ const ArenaGame: React.FC = () => {
   }
 
   function updateGame(deltaTime: number) {
-    const state = { ...gameStateRef.current };
+    const state = {
+      ...gameStateRef.current,
+      player: {
+        ...gameStateRef.current.player,
+        stats: { ...gameStateRef.current.player.stats }
+      }
+    };
     state.gameTime += deltaTime;
 
     updateInput();
@@ -217,6 +224,11 @@ const ArenaGame: React.FC = () => {
     });
 
     state.enemies = state.enemies.filter(e => e.stats.currentHp > 0);
+    
+    // Incrementar contador de enemigos eliminados DESPUÉS de procesar
+    if (deadEnemies.length > 0) {
+      state.enemiesKilled += deadEnemies.length;
+    }
 
     // Actualizar magnet duration
     if (state.player.magnetActive) {
@@ -523,7 +535,7 @@ const ArenaGame: React.FC = () => {
       <GameHUD 
         gameState={gameState} 
         enemiesOnScreen={gameState.enemies.length}
-        waveProgress={0} // TODO: implementar tracking de progreso
+        waveProgress={waveSystemRef.current.getEnemiesSpawned()}
       />
       
       {gameState.showLevelUp && (

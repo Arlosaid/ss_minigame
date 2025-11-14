@@ -24,6 +24,10 @@ export class WaveSystem {
     return this.currentWave;
   }
 
+  getEnemiesSpawned(): number {
+    return this.enemiesSpawned;
+  }
+
   update(deltaTime: number, currentEnemies: Enemy[]): Enemy[] {
     const waveConfig = this.getWaveConfig(this.currentWave);
     const newEnemies: Enemy[] = [];

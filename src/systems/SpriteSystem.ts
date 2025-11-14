@@ -155,12 +155,10 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
       }
     }
 
-    // Cargar frames de ataque
+    // Cargar frames de ataque (solo 2 para animación más rápida)
     const attackFrames = await SpriteManager.loadMultiple([
       `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_1.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_2.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_3.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_4.png`
+      `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_attack_2.png`
     ]);
 
     // Agregar animaciones
@@ -178,7 +176,7 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
 
     sprite.addAnimation('attack', {
       frames: attackFrames.length > 0 ? attackFrames : idleFrames,
-      frameRate: 20,
+      frameRate: 10,
       loop: false
     });
 

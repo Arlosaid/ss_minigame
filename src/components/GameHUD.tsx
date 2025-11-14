@@ -8,7 +8,7 @@ interface Props {
 }
 
 const GameHUD: React.FC<Props> = ({ gameState, enemiesOnScreen, waveProgress }) => {
-  const { player, wave, gameTime } = gameState;
+  const { player, wave, gameTime, enemiesKilled } = gameState;
   
   const hpPercent = (player.stats.currentHp / player.stats.maxHp) * 100;
   
@@ -158,6 +158,9 @@ const GameHUD: React.FC<Props> = ({ gameState, enemiesOnScreen, waveProgress }) 
           fontWeight: enemiesOnScreen > 10 ? 'bold' : 'normal'
         }}>
           👹 En pantalla: {enemiesOnScreen}
+        </div>
+        <div style={{ marginBottom: '5px', color: '#ffd700' }}>
+          💀 Eliminados: {enemiesKilled}
         </div>
         <div style={{ marginBottom: '5px' }}>⏱️ Tiempo: {formatTime(gameTime)}</div>
         <div style={{ marginBottom: '5px', color: '#95e1d3' }}>

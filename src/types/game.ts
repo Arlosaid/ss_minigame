@@ -91,6 +91,7 @@ export interface GameState {
   projectiles: Projectile[];
   drops: Drop[];
   wave: number;
+  enemiesKilled: number; // Contador de enemigos eliminados
   gameTime: number;
   isPaused: boolean;
   isGameOver: boolean;
