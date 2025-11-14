@@ -27,13 +27,9 @@ const ArenaGame: React.FC = () => {
   useEffect(() => {
     const loadSprites = async () => {
       try {
-        console.log('Loading sprites...');
         playerSpriteRef.current = await createPlayerSprite();
-        console.log('Player sprite loaded:', playerSpriteRef.current);
-        console.log('Current frame:', playerSpriteRef.current.getCurrentFrame());
         setSpritesLoaded(true);
       } catch (error) {
-        console.error('Error loading sprites:', error);
         setSpritesLoaded(true); // Continuar aunque falle
       }
     };
@@ -72,10 +68,10 @@ const ArenaGame: React.FC = () => {
 
       if (!gameStateRef.current.isPaused && !gameStateRef.current.isGameOver) {
         updateGame(deltaTime);
-        renderGame();
-      } else if (gameStateRef.current.isPaused || gameStateRef.current.showLevelUp) {
-        renderGame();
       }
+      
+      // SIEMPRE renderizar, independientemente del estado del juego
+      renderGame();
 
       animationFrameId = requestAnimationFrame(gameLoop);
     };
@@ -261,6 +257,9 @@ const ArenaGame: React.FC = () => {
     }
 
     state.wave = waveSystemRef.current.getCurrentWave();
+    
+    // Actualizar el estado para forzar re-render
+    gameStateRef.current = state;
     setGameState(state);
   }
 
