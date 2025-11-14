@@ -12,13 +12,20 @@ const App: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: '100vh',
-        backgroundImage: `url(${import.meta.env.BASE_URL}assets/images/backgrounds/main.jpg)`,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#0a0a1a',
+        backgroundImage: `linear-gradient(135deg, #0a0a1a 0%, #1a0a2e 50%, #0a0a1a 100%), url(${import.meta.env.BASE_URL}assets/images/backgrounds/main.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
+        backgroundBlendMode: 'overlay',
         fontFamily: "'Trebuchet MS', 'Arial Black', sans-serif",
-        position: 'relative'
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        overflow: 'hidden',
+        padding: '1rem'
       }}>
         {/* Overlay oscuro para mejorar legibilidad */}
         <div style={{
@@ -27,7 +34,7 @@ const App: React.FC = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
           zIndex: 0
         }} />
 
@@ -42,7 +49,7 @@ const App: React.FC = () => {
           {/* Título con efecto brillante */}
           <h1 style={{
             color: '#ffd700',
-            fontSize: '80px',
+            fontSize: 'clamp(2rem, 10vw, 80px)',
             marginBottom: '10px',
             textShadow: `
               0 0 20px rgba(255, 215, 0, 0.8),
@@ -51,20 +58,23 @@ const App: React.FC = () => {
               3px 3px 6px rgba(0, 0, 0, 0.8)
             `,
             fontWeight: 'bold',
-            letterSpacing: '8px',
+            letterSpacing: 'clamp(2px, 1vw, 8px)',
             textTransform: 'uppercase',
-            animation: 'glow 2s ease-in-out infinite alternate'
+            animation: 'glow 2s ease-in-out infinite alternate',
+            textAlign: 'center',
+            padding: '0 1rem'
           }}>
             Saint Seiya
           </h1>
 
           <p style={{
             color: '#fff',
-            fontSize: '28px',
-            marginBottom: '80px',
+            fontSize: 'clamp(1rem, 4vw, 28px)',
+            marginBottom: 'clamp(2rem, 8vw, 80px)',
             textShadow: '2px 2px 4px rgba(0, 0, 0, 0.9)',
-            letterSpacing: '2px',
-            fontStyle: 'italic'
+            letterSpacing: 'clamp(1px, 0.5vw, 2px)',
+            fontStyle: 'italic',
+            textAlign: 'center'
           }}>
             Las 12 Casas del Santuario
           </p>
@@ -73,15 +83,18 @@ const App: React.FC = () => {
           <div style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: '25px',
-            minWidth: '400px'
+            gap: 'clamp(15px, 3vw, 25px)',
+            width: '100%',
+            maxWidth: '400px',
+            minWidth: '280px',
+            padding: '0 1rem'
           }}>
             {/* Botón Iniciar */}
             <button
               onClick={() => setGameMode('game')}
               style={{
-                padding: '20px 60px',
-                fontSize: '32px',
+                padding: 'clamp(15px, 3vw, 20px) clamp(30px, 8vw, 60px)',
+                fontSize: 'clamp(1.2rem, 5vw, 32px)',
                 fontWeight: 'bold',
                 background: 'linear-gradient(135deg, #ffd700 0%, #ffed4e 50%, #ffd700 100%)',
                 color: '#000',
@@ -90,13 +103,15 @@ const App: React.FC = () => {
                 cursor: 'pointer',
                 transition: 'all 0.3s',
                 textTransform: 'uppercase',
-                letterSpacing: '3px',
+                letterSpacing: 'clamp(1px, 0.5vw, 3px)',
                 boxShadow: `
                   0 6px 20px rgba(255, 215, 0, 0.6),
                   inset 0 -2px 8px rgba(0, 0, 0, 0.2)
                 `,
                 textShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
-                fontFamily: "'Arial Black', sans-serif"
+                fontFamily: "'Arial Black', sans-serif",
+                touchAction: 'manipulation',
+                minHeight: '44px'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-5px) scale(1.05)';
@@ -127,8 +142,8 @@ const App: React.FC = () => {
             <button
               onClick={() => window.close()}
               style={{
-                padding: '18px 60px',
-                fontSize: '26px',
+                padding: 'clamp(12px, 3vw, 18px) clamp(30px, 8vw, 60px)',
+                fontSize: 'clamp(1rem, 4vw, 26px)',
                 fontWeight: 'bold',
                 background: 'rgba(255, 255, 255, 0.15)',
                 color: '#fff',
@@ -137,11 +152,13 @@ const App: React.FC = () => {
                 cursor: 'pointer',
                 transition: 'all 0.3s',
                 textTransform: 'uppercase',
-                letterSpacing: '2px',
+                letterSpacing: 'clamp(1px, 0.4vw, 2px)',
                 backdropFilter: 'blur(10px)',
                 boxShadow: '0 4px 15px rgba(0, 0, 0, 0.5)',
                 textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
-                fontFamily: "'Arial Black', sans-serif"
+                fontFamily: "'Arial Black', sans-serif",
+                touchAction: 'manipulation',
+                minHeight: '44px'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-3px)';
@@ -168,31 +185,32 @@ const App: React.FC = () => {
 
           {/* Controles info */}
           <div style={{
-            marginTop: '60px',
-            padding: '20px 40px',
+            marginTop: 'clamp(2rem, 8vw, 60px)',
+            padding: 'clamp(15px, 3vw, 20px) clamp(20px, 5vw, 40px)',
             background: 'rgba(0, 0, 0, 0.7)',
             border: '2px solid rgba(255, 215, 0, 0.5)',
             borderRadius: '10px',
             color: '#fff',
             textAlign: 'center',
             maxWidth: '500px',
+            width: '100%',
             backdropFilter: 'blur(5px)'
           }}>
             <h3 style={{
               color: '#ffd700',
               marginBottom: '10px',
-              fontSize: '20px',
+              fontSize: 'clamp(1rem, 3vw, 20px)',
               textShadow: '0 0 10px rgba(255, 215, 0, 0.6)'
             }}>
               Controles
             </h3>
-            <p style={{ margin: '5px 0', fontSize: '16px' }}>
+            <p style={{ margin: '5px 0', fontSize: 'clamp(0.8rem, 2.5vw, 16px)' }}>
               <strong>WASD</strong> o <strong>Flechas</strong>: Movimiento
             </p>
-            <p style={{ margin: '5px 0', fontSize: '16px' }}>
+            <p style={{ margin: '5px 0', fontSize: 'clamp(0.8rem, 2.5vw, 16px)' }}>
               <strong>Mouse</strong>: Seleccionar mejoras
             </p>
-            <p style={{ margin: '5px 0', fontSize: '16px' }}>
+            <p style={{ margin: '5px 0', fontSize: 'clamp(0.8rem, 2.5vw, 16px)' }}>
               Ataque automático al acercarte a enemigos
             </p>
           </div>

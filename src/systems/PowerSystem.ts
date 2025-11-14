@@ -316,7 +316,7 @@ export class PowerSystem {
     const dy = nearestEnemy.y - playerY;
     const distance = Math.hypot(dx, dy);
     
-    this.goldenArrows.push({
+    const newArrow = {
       id: this.nextArrowId++,
       x: playerX,
       y: playerY,
@@ -326,7 +326,9 @@ export class PowerSystem {
       createdAt: Date.now(),
       lifetime: POWER_CONFIG.GOLDEN_ARROW_LIFETIME,
       targetId: nearestEnemy.id
-    });
+    };
+    
+    this.goldenArrows.push(newArrow);
   }
 
   /**
@@ -877,9 +879,9 @@ export class PowerSystem {
 
   /**
    * 🏹✨ Dibujar Flechas Doradas ÉPICAS ✨🏹
-   * Flechas brillantes que buscan enemigos
+   * Flechas brillantes que buscan enemigos usando la imagen de Sagitario
    */
-  static drawGoldenArrows(ctx: CanvasRenderingContext2D): void {
+  static drawGoldenArrows(ctx: CanvasRenderingContext2D, arrowImage?: HTMLImageElement | null): void {
     const now = Date.now();
     
     this.goldenArrows.forEach(arrow => {
@@ -889,59 +891,87 @@ export class PowerSystem {
       
       ctx.save();
       
-      // Calcular ángulo de la flecha
+      // Calcular ángulo de la flecha para que apunte en la dirección del movimiento
       const angle = Math.atan2(arrow.vy, arrow.vx);
       
-      // Trail dorado (estela)
+      // Trail dorado (estela) - más pequeño y discreto
       const trailLength = POWER_CONFIG.GOLDEN_ARROW_TRAIL_LENGTH;
       for (let i = 0; i < trailLength; i++) {
         const trailProgress = i / trailLength;
-        const trailX = arrow.x - arrow.vx * trailProgress * 0.05;
-        const trailY = arrow.y - arrow.vy * trailProgress * 0.05;
-        const trailOpacity = opacity * (1 - trailProgress) * 0.5;
-        const trailSize = POWER_CONFIG.GOLDEN_ARROW_SIZE * (1 - trailProgress * 0.5);
+        const trailX = arrow.x - arrow.vx * trailProgress * 0.03; // Menos distancia
+        const trailY = arrow.y - arrow.vy * trailProgress * 0.03;
+        const trailOpacity = opacity * (1 - trailProgress) * 0.4; // Menos visible
+        const trailSize = POWER_CONFIG.GOLDEN_ARROW_SIZE * (1 - trailProgress * 0.5) * 0.5; // Más pequeño
         
         ctx.globalAlpha = trailOpacity;
         ctx.fillStyle = `rgba(255, 215, 0, ${trailOpacity})`;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 8;
         ctx.shadowColor = '#FFD700';
         
         ctx.beginPath();
-        ctx.arc(trailX, trailY, trailSize * 0.3, 0, Math.PI * 2);
+        ctx.arc(trailX, trailY, trailSize * 0.25, 0, Math.PI * 2);
         ctx.fill();
       }
       
-      // Flecha principal
-      ctx.globalAlpha = opacity;
-      ctx.translate(arrow.x, arrow.y);
-      ctx.rotate(angle);
-      
-      // Aura dorada
-      ctx.shadowBlur = 15;
-      ctx.shadowColor = '#FFD700';
-      ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.6})`;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.8, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Cuerpo de la flecha (dorado brillante)
-      ctx.shadowBlur = 10;
-      ctx.fillStyle = `rgba(255, 230, 100, ${opacity})`;
-      ctx.beginPath();
-      ctx.moveTo(POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0);
-      ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.3, -POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.2);
-      ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0);
-      ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.3, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Punta brillante
-      ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.15, 0, Math.PI * 2);
-      ctx.fill();
+      // Si tenemos la imagen de la flecha, usarla; sino, dibujar con canvas
+      if (arrowImage && arrowImage.complete) {
+        // Usar la imagen de la flecha de Sagitario
+        ctx.globalAlpha = opacity;
+        ctx.translate(arrow.x, arrow.y);
+        ctx.rotate(angle);
+        
+        // Aura dorada detrás de la flecha (más pequeña y menos ancha)
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#FFD700';
+        ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.3})`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.8, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Dibujar la imagen de la flecha (más pequeña y alargada)
+        const imgWidth = POWER_CONFIG.GOLDEN_ARROW_SIZE * 1.2; // Más angosta
+        const imgHeight = POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.6; // Más corta
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          arrowImage,
+          -imgWidth / 2,
+          -imgHeight / 2,
+          imgWidth,
+          imgHeight
+        );
+      } else {
+        // Fallback: dibujar flecha con canvas si la imagen no carga
+        ctx.globalAlpha = opacity;
+        ctx.translate(arrow.x, arrow.y);
+        ctx.rotate(angle);
+        
+        // Aura dorada
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#FFD700';
+        ctx.fillStyle = `rgba(255, 215, 0, ${opacity * 0.6})`;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.8, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Cuerpo de la flecha (dorado brillante)
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = `rgba(255, 230, 100, ${opacity})`;
+        ctx.beginPath();
+        ctx.moveTo(POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0);
+        ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.3, -POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.2);
+        ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0);
+        ctx.lineTo(-POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.3, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Punta brillante
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.5, 0, POWER_CONFIG.GOLDEN_ARROW_SIZE * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
       
       ctx.restore();
     });

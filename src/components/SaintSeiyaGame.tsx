@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Knight, GoldSaint, Upgrade } from '../data/gameData';
 import { BRONZE_KNIGHTS, GOLD_SAINTS, UPGRADES } from '../data/gameData';
+import MobileControls from './MobileControls';
 import { createPlayerSprite, createEnemySprite, createBossSprite, AnimatedSprite } from '../systems/SpriteSystem';
 import { CombatSystem } from '../core/Combat';
 import { PowerSystem } from '../systems/PowerSystem';
@@ -142,20 +143,29 @@ interface BossSuperAttack {
 }
 
 const SaintSeiyaGame: React.FC = () => {
-  const [gameStarted] = useState(true);
+  const [gameStarted, setGameStarted] = useState(true); // Iniciar automáticamente ya que el menú está en App.tsx
   const [player, setPlayer] = useState<Player | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true); // Nuevo estado para tracking
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [boss, setBoss] = useState<Boss | null>(null);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [drops, setDrops] = useState<Drop[]>([]);
   const [spawnWarnings, setSpawnWarnings] = useState<SpawnWarning[]>([]);
   const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set());
+  const [mobileDirection, setMobileDirection] = useState({ x: 0, y: 0 });
+  const [isMobile, setIsMobile] = useState(false);
   const [score, setScore] = useState(0);
   const [lastShot, setLastShot] = useState(0);
   const [currentHouse, setCurrentHouse] = useState(0);
   const [waveEnemies, setWaveEnemies] = useState(0);
   const [waveKills, setWaveKills] = useState(0);
   const [gameState, setGameState] = useState<'playing' | 'levelup' | 'houseclear' | 'gameover'>('playing');
+  
+  // Debug: monitorear cambios de gameState
+  useEffect(() => {
+    console.log('🎯 GameState cambió a:', gameState);
+  }, [gameState]);
+  
   const [upgrades, setUpgrades] = useState<PlayerUpgrades>({
     damage: 0,
     speed: 0,
@@ -177,11 +187,15 @@ const SaintSeiyaGame: React.FC = () => {
   const [bossSuperAttacks, setBossSuperAttacks] = useState<BossSuperAttack[]>([]);
   const [isAttacking, setIsAttacking] = useState(false);
   const [projectileImage, setProjectileImage] = useState<HTMLImageElement | null>(null);
+  const [goldenArrowImage, setGoldenArrowImage] = useState<HTMLImageElement | null>(null);
   const [floorImage, setFloorImage] = useState<HTMLImageElement | null>(null);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
   const [stageTime, setStageTime] = useState(0);
   const [waveNumber, setWaveNumber] = useState(1);
   const [screenShake, setScreenShake] = useState({ x: 0, y: 0 });
+  const [canvasWidth, setCanvasWidth] = useState(WIDTH);
+  const [canvasHeight, setCanvasHeight] = useState(HEIGHT);
+  const [isPortrait, setIsPortrait] = useState(false); // Detectar orientación portrait
   const stageStartTime = useRef<number>(0);
   const backgroundMusic = useRef<HTMLAudioElement | null>(null);
   const playerRef = useRef<Player | null>(null);
@@ -194,6 +208,28 @@ const SaintSeiyaGame: React.FC = () => {
   const lastCleanupTime = useRef<number>(0);
   const lastLightningTrigger = useRef<number>(0);
   const lastGoldenArrowTrigger = useRef<number>(0);
+  
+  // Refs adicionales para acceso en gameLoop
+  const keysRef = useRef<Set<string>>(new Set());
+  const mobileDirectionRef = useRef({ x: 0, y: 0 });
+  const upgradesRef = useRef<PlayerUpgrades>(upgrades);
+  const playerSpriteRef = useRef<AnimatedSprite | null>(null);
+  const isAttackingRef = useRef(false);
+  const projectileImageRef = useRef<HTMLImageElement | null>(null);
+  const goldenArrowImageRef = useRef<HTMLImageElement | null>(null);
+  const floorImageRef = useRef<HTMLImageElement | null>(null);
+  const cameraRef = useRef({ x: 0, y: 0 });
+  const screenShakeRef = useRef({ x: 0, y: 0 });
+  const bossAttackImageRef = useRef<HTMLImageElement | null>(null);
+  const bossAttackEffectsRef = useRef<BossAttackEffect[]>([]);
+  const bossSuperAttackWarningsRef = useRef<BossSuperAttackWarning[]>([]);
+  const bossSuperAttacksRef = useRef<BossSuperAttack[]>([]);
+  const bossSuperAttackSpritesRef = useRef<HTMLImageElement[]>([]);
+  
+  // Refs para estados que se usan en el gameLoop
+  const gameStartedRef = useRef<boolean>(true);
+  const isMobileRef = useRef<boolean>(false);
+  const gameStateRef = useRef<'playing' | 'levelup' | 'houseclear' | 'gameover'>('playing');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nextEnemyId = useRef(0);
@@ -208,16 +244,13 @@ const SaintSeiyaGame: React.FC = () => {
   
   // Mantener refs actualizados para acceso rápido
   useEffect(() => {
+    console.log('🔄 playerRef actualizado:', player);
     playerRef.current = player;
   }, [player]);
   
   useEffect(() => {
     bossRef.current = boss;
   }, [boss]);
-  
-  useEffect(() => {
-    enemiesRef.current = enemies;
-  }, [enemies]);
   
   useEffect(() => {
     projectilesRef.current = projectiles;
@@ -230,14 +263,91 @@ const SaintSeiyaGame: React.FC = () => {
   useEffect(() => {
     spawnWarningsRef.current = spawnWarnings;
   }, [spawnWarnings]);
+  
+  // Sincronizar nuevas refs
+  useEffect(() => {
+    keysRef.current = keysPressed;
+  }, [keysPressed]);
+  
+  useEffect(() => {
+    mobileDirectionRef.current = mobileDirection;
+  }, [mobileDirection]);
+  
+  useEffect(() => {
+    upgradesRef.current = upgrades;
+  }, [upgrades]);
+  
+  useEffect(() => {
+    playerSpriteRef.current = playerSprite;
+  }, [playerSprite]);
+  
+  useEffect(() => {
+    isAttackingRef.current = isAttacking;
+  }, [isAttacking]);
+  
+  useEffect(() => {
+    projectileImageRef.current = projectileImage;
+  }, [projectileImage]);
+  
+  useEffect(() => {
+    goldenArrowImageRef.current = goldenArrowImage;
+  }, [goldenArrowImage]);
+  
+  useEffect(() => {
+    floorImageRef.current = floorImage;
+  }, [floorImage]);
+  
+  useEffect(() => {
+    cameraRef.current = camera;
+  }, [camera]);
+  
+  useEffect(() => {
+    screenShakeRef.current = screenShake;
+  }, [screenShake]);
+  
+  useEffect(() => {
+    bossAttackImageRef.current = bossAttackImage;
+  }, [bossAttackImage]);
+  
+  useEffect(() => {
+    bossAttackEffectsRef.current = bossAttackEffects;
+  }, [bossAttackEffects]);
+  
+  useEffect(() => {
+    bossSuperAttackWarningsRef.current = bossSuperAttackWarnings;
+  }, [bossSuperAttackWarnings]);
+  
+  useEffect(() => {
+    bossSuperAttacksRef.current = bossSuperAttacks;
+  }, [bossSuperAttacks]);
+  
+  useEffect(() => {
+    bossSuperAttackSpritesRef.current = bossSuperAttackSprites;
+  }, [bossSuperAttackSprites]);
+  
+  // Sincronizar refs de estados
+  useEffect(() => {
+    gameStartedRef.current = gameStarted;
+  }, [gameStarted]);
+  
+  useEffect(() => {
+    isMobileRef.current = isMobile;
+  }, [isMobile]);
+  
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
-  const initializeGame = async () => {
+  const initializeGame = useCallback(async () => {
+    console.log('🚀 initializeGame() iniciando...');
+    setIsInitializing(true); // Marcar que estamos inicializando
+    
     // Usar el primer caballero por defecto (Seiya)
     const knight = BRONZE_KNIGHTS[0]!;
     const initialX = MAP_WIDTH / 2;
     const initialY = MAP_HEIGHT / 2;
     
-    setPlayer({
+    const newPlayer = {
       x: initialX,
       y: initialY,
       knight,
@@ -245,7 +355,11 @@ const SaintSeiyaGame: React.FC = () => {
       maxHealth: PLAYER_CONFIG.STARTING_MAX_HEALTH,
       cosmos: 0,
       level: PLAYER_CONFIG.STARTING_LEVEL
-    });
+    };
+    
+    console.log('👤 Creando jugador:', newPlayer);
+    setPlayer(newPlayer);
+    console.log('✅ setPlayer() llamado');
     
     // Inicializar cámara centrada en el jugador
     const camX = Math.max(0, Math.min(MAP_WIDTH - WIDTH, initialX - WIDTH / 2));
@@ -259,6 +373,7 @@ const SaintSeiyaGame: React.FC = () => {
     setStageTime(0);
     setWaveNumber(1);
     stageStartTime.current = Date.now();
+    console.log('✅ Estado del juego establecido a: playing');
     
     // Inicializar música de fondo
     if (!backgroundMusic.current) {
@@ -316,6 +431,14 @@ const SaintSeiyaGame: React.FC = () => {
         superAttackSprites.push(img);
       }
       
+      // Cargar imagen de la flecha de Sagitario
+      const arrowImg = new Image();
+      arrowImg.onload = () => {
+        setGoldenArrowImage(arrowImg);
+      };
+      arrowImg.onerror = () => {};
+      arrowImg.src = `${import.meta.env.BASE_URL}assets/skills/flecha_sagitario.png`;
+      
       // Cargar imagen del floor
       const floorImg = new Image();
       floorImg.onload = () => {
@@ -323,15 +446,51 @@ const SaintSeiyaGame: React.FC = () => {
       };
       floorImg.onerror = () => {};
       floorImg.src = `${import.meta.env.BASE_URL}assets/sprites/stages/floor_1_stage.png`;
+      
+      // ✅ Marcar inicialización completa DESPUÉS de cargar sprites críticos
+      console.log('✅ Sprites cargados, iniciando juego');
+      setIsInitializing(false);
     } catch (error) {
-      // Error silencioso al cargar sprites
+      // Error silencioso al cargar sprites, pero igual iniciar el juego
+      console.warn('⚠️ Error cargando sprites, iniciando de todas formas:', error);
+      setIsInitializing(false);
     }
-  };
+  }, []);
 
-  // Inicializar el juego automáticamente al montar el componente
+  // Detectar dispositivo móvil - Adaptarse a la orientación del dispositivo
   useEffect(() => {
-    initializeGame();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const updateDimensions = () => {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+        (window.innerWidth <= 768);
+      
+      // Detectar orientación
+      const portrait = window.innerHeight > window.innerWidth;
+      
+      setIsMobile(mobile);
+      setIsPortrait(portrait);
+      
+      // Adaptar dimensiones del canvas a la orientación
+      if (mobile && portrait) {
+        // En vertical, usar el ancho de la ventana y calcular alto proporcional
+        const ratio = HEIGHT / WIDTH; // Mantener proporción del juego
+        setCanvasWidth(Math.min(window.innerWidth, WIDTH));
+        setCanvasHeight(Math.min(window.innerWidth * ratio, HEIGHT));
+      } else {
+        // En horizontal o desktop, usar dimensiones base del juego
+        setCanvasWidth(WIDTH);
+        setCanvasHeight(HEIGHT);
+      }
+    };
+    
+    updateDimensions();
+    
+    window.addEventListener('resize', updateDimensions);
+    window.addEventListener('orientationchange', updateDimensions);
+    
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      window.removeEventListener('orientationchange', updateDimensions);
+    };
   }, []);
 
   const spawnBoss = useCallback(() => {
@@ -460,10 +619,39 @@ const SaintSeiyaGame: React.FC = () => {
         cosmosRequired = calculateCosmosRequired(newLevel);
         
         const choices: Upgrade[] = [];
-        while (choices.length < 3) {
-          const upgrade = UPGRADES[Math.floor(Math.random() * UPGRADES.length)]!;
-          if (!choices.includes(upgrade)) choices.push(upgrade);
+        const currentUpgrades = upgrades;
+        
+        // Priorizar habilidades nuevas (lightning, goldenArrow, athenaShield)
+        const powerUpgrades = UPGRADES.filter(u => 
+          u.id === 'lightning' || u.id === 'goldenArrow' || u.id === 'athenaShield'
+        );
+        const statUpgrades = UPGRADES.filter(u => 
+          u.id !== 'lightning' && u.id !== 'goldenArrow' && u.id !== 'athenaShield'
+        );
+        
+        // Agregar habilidades nuevas primero (que no se han desbloqueado)
+        const unlockedPowers = powerUpgrades.filter(u => 
+          currentUpgrades[u.id as keyof PlayerUpgrades] === 0
+        );
+        
+        // Si hay habilidades sin desbloquear, agregar una
+        if (unlockedPowers.length > 0 && choices.length < 3) {
+          const randomPower = unlockedPowers[Math.floor(Math.random() * unlockedPowers.length)]!;
+          choices.push(randomPower);
         }
+        
+        // Llenar el resto con mejoras aleatorias
+        const allAvailable = [...powerUpgrades, ...statUpgrades];
+        while (choices.length < 3) {
+          const upgrade = allAvailable[Math.floor(Math.random() * allAvailable.length)]!;
+          if (!choices.includes(upgrade)) {
+            const currentLevel = currentUpgrades[upgrade.id as keyof PlayerUpgrades] || 0;
+            if (currentLevel < upgrade.levels.length) {
+              choices.push(upgrade);
+            }
+          }
+        }
+        
         setUpgradeChoices(choices);
         setGameState('levelup');
       }
@@ -506,7 +694,11 @@ const SaintSeiyaGame: React.FC = () => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
       }
-      setKeysPressed(prev => new Set(prev).add(e.key.toLowerCase()));
+      setKeysPressed(prev => {
+        const newSet = new Set(prev).add(e.key.toLowerCase());
+        keysRef.current = newSet; // Actualizar ref inmediatamente
+        return newSet;
+      });
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -516,6 +708,7 @@ const SaintSeiyaGame: React.FC = () => {
       setKeysPressed(prev => {
         const newSet = new Set(prev);
         newSet.delete(e.key.toLowerCase());
+        keysRef.current = newSet; // Actualizar ref inmediatamente
         return newSet;
       });
     };
@@ -571,10 +764,12 @@ const SaintSeiyaGame: React.FC = () => {
           lastCleanupTime.current = now;
           const currentPlayer = playerRef.current;
           if (currentPlayer) {
-            return currentEnemies.filter(e => {
+            const filtered = currentEnemies.filter(e => {
               const dist = Math.hypot(currentPlayer.x - e.x, currentPlayer.y - e.y);
               return dist <= ENEMY_CONFIG.CLEANUP_DISTANCE;
             });
+            enemiesRef.current = filtered;
+            return filtered;
           }
         }
         return currentEnemies;
@@ -647,24 +842,54 @@ const SaintSeiyaGame: React.FC = () => {
   }, [gameStarted, gameState, waveNumber, boss]);
 
   useEffect(() => {
-    if (!gameStarted || !player || gameState !== 'playing') return;
-    
+    console.log('🎬 useEffect del gameLoop ejecutándose - Iniciando loop');
+    // ✅ SIEMPRE correr el gameLoop para renderizar continuamente
     let animationFrameId: number;
     let lastTime = performance.now();
     
     const gameLoop = (currentTime: number) => {
+      console.log('🎮 gameLoop ejecutándose, timestamp:', currentTime);
       const currentPlayer = playerRef.current;
-      if (!currentPlayer) return;
+      console.log('👤 gameLoop - currentPlayer:', currentPlayer);
       
-      // Capturar estados actuales al inicio del frame
-      const currentProjectiles = projectilesRef.current;
-      const currentEnemies = enemiesRef.current;
-      const currentBoss = bossRef.current;
+      // ⚡ SIEMPRE llamar a requestAnimationFrame para mantener el loop activo
+      animationFrameId = requestAnimationFrame(gameLoop);
       
-      // Calcular deltaTime en segundos
+      // Calcular deltaTime en segundos (necesario para animaciones)
       const deltaTime = Math.min((currentTime - lastTime) / 1000, PERFORMANCE_CONFIG.MAX_DELTA_TIME);
       lastTime = currentTime;
       
+      // Variables para lógica de movimiento (necesarias para animaciones)
+      let dx = 0, dy = 0;
+      let isMovingFromInput = false;
+      
+      // ===== LEER INPUT (SIEMPRE, para animaciones) =====
+      // Input de teclado
+      const currentKeys = keysRef.current;
+      if (currentKeys.has('w') || currentKeys.has('arrowup')) { dy -= 1; isMovingFromInput = true; }
+      if (currentKeys.has('s') || currentKeys.has('arrowdown')) { dy += 1; isMovingFromInput = true; }
+      if (currentKeys.has('a') || currentKeys.has('arrowleft')) { dx -= 1; isMovingFromInput = true; }
+      if (currentKeys.has('d') || currentKeys.has('arrowright')) { dx += 1; isMovingFromInput = true; }
+      
+      // Input de joystick móvil (override si está activo)
+      const currentMobileDir = mobileDirectionRef.current;
+      if (isMobileRef.current && (currentMobileDir.x !== 0 || currentMobileDir.y !== 0)) {
+        dx = currentMobileDir.x;
+        dy = currentMobileDir.y;
+        isMovingFromInput = true;
+      }
+      
+      // Solo actualizar lógica del juego si hay jugador y está en estado 'playing'
+      if (currentPlayer) {
+        const shouldUpdateLogic = gameStartedRef.current && gameStateRef.current === 'playing';
+        // ===== INICIO DE LA LÓGICA DEL JUEGO =====
+        
+        // Capturar estados actuales al inicio del frame
+        const currentProjectiles = projectilesRef.current;
+        const currentEnemies = enemiesRef.current;
+        const currentBoss = bossRef.current;
+      
+        if (shouldUpdateLogic) {
       // Actualizar timer del stage
       const currentStageTime = Math.floor((Date.now() - stageStartTime.current) / 1000);
       setStageTime(currentStageTime);
@@ -676,15 +901,9 @@ const SaintSeiyaGame: React.FC = () => {
       }
       
       // Velocidad base balanceada (progresa de forma satisfactoria)
-      const speedMultiplier = currentPlayer.knight.speed + upgrades.speed * PLAYER_CONFIG.SPEED_UPGRADE_MULTIPLIER;
+      const currentUpgrades = upgradesRef.current;
+      const speedMultiplier = currentPlayer.knight.speed + currentUpgrades.speed * PLAYER_CONFIG.SPEED_UPGRADE_MULTIPLIER;
       const pixelsPerSecond = PLAYER_CONFIG.BASE_SPEED * speedMultiplier;
-      
-      // Leer input y construir vector de dirección
-      let dx = 0, dy = 0;
-      if (keysPressed.has('w') || keysPressed.has('arrowup')) dy -= 1;
-      if (keysPressed.has('s') || keysPressed.has('arrowdown')) dy += 1;
-      if (keysPressed.has('a') || keysPressed.has('arrowleft')) dx -= 1;
-      if (keysPressed.has('d') || keysPressed.has('arrowright')) dx += 1;
       
       // Actualizar posición si hay movimiento
       if (dx !== 0 || dy !== 0) {
@@ -715,7 +934,7 @@ const SaintSeiyaGame: React.FC = () => {
       
       // ===== SISTEMA DE DISPARO AUTOMÁTICO (INLINE) =====
       const nowShoot = Date.now();
-      const cooldownTime = calculateFireRate(upgrades.fireRate);
+      const cooldownTime = calculateFireRate(currentUpgrades.fireRate);
       
       let projectilesToAdd: Projectile[] = [];
       
@@ -753,7 +972,7 @@ const SaintSeiyaGame: React.FC = () => {
           setIsAttacking(true);
           setTimeout(() => setIsAttacking(false), 200);
           
-          const shots = 1 + upgrades.multiShot;
+          const shots = 1 + currentUpgrades.multiShot;
           
           // Calcular ángulo base hacia el objetivo
           const baseAngle = Math.atan2(target.y - currentPlayer.y, target.x - currentPlayer.x);
@@ -771,7 +990,7 @@ const SaintSeiyaGame: React.FC = () => {
               y: startY,
               dx: Math.cos(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
               dy: Math.sin(angle) * PLAYER_CONFIG.PROJECTILE_SPEED,
-              damage: PLAYER_CONFIG.BASE_DAMAGE + upgrades.damage * PLAYER_CONFIG.DAMAGE_UPGRADE_BONUS,
+              damage: PLAYER_CONFIG.BASE_DAMAGE + currentUpgrades.damage * PLAYER_CONFIG.DAMAGE_UPGRADE_BONUS,
               color: currentPlayer.knight.projectileColor,
               isEnemy: false,
               angle: angle
@@ -783,8 +1002,8 @@ const SaintSeiyaGame: React.FC = () => {
       
       // ===== SISTEMA DE RAYO DE ZEUS =====
       const nowLightning = Date.now();
-      if (upgrades.lightning > 0) {
-        const lightningLevel = upgrades.lightning;
+      if (currentUpgrades.lightning > 0) {
+        const lightningLevel = currentUpgrades.lightning;
         const lightningCooldown = PowerSystem.getLightningCooldown(lightningLevel);
         
         if (nowLightning - lastLightningTrigger.current >= lightningCooldown) {
@@ -821,35 +1040,43 @@ const SaintSeiyaGame: React.FC = () => {
             lightningLevel,
             currentEnemies,
             (enemyId, damage) => {
-              setEnemies(prev => prev.map(e => {
-                if (e.id === enemyId) {
-                  const newHealth = e.health - damage;
-                  if (newHealth <= 0) {
-                    // Crear drop
-                    const rand = Math.random();
-                    setDrops(prevDrops => [...prevDrops, {
-                      id: nextOrbId.current++,
-                      x: e.x,
-                      y: e.y,
-                      type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
-                      value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
-                      lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
-                    }]);
-                    setScore(s => s + 100);
-                    setWaveKills(k => {
-                      const newKills = k + 1;
-                      if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
-                        setWaveNumber(w => w + 1);
-                        return 0;
-                      }
-                      return newKills;
-                    });
-                    return null; // Eliminar enemigo
-                  }
-                  return { ...e, health: newHealth };
+              // Actualizar enemigos inmediatamente en el ref
+              const enemyIndex = enemiesRef.current.findIndex(e => e.id === enemyId);
+              if (enemyIndex !== -1) {
+                const enemy = enemiesRef.current[enemyIndex];
+                const newHealth = enemy.health - damage;
+                
+                if (newHealth <= 0) {
+                  // Eliminar enemigo
+                  enemiesRef.current = enemiesRef.current.filter(e => e.id !== enemyId);
+                  
+                  // Crear drop
+                  const rand = Math.random();
+                  setDrops(prevDrops => [...prevDrops, {
+                    id: nextOrbId.current++,
+                    x: enemy.x,
+                    y: enemy.y,
+                    type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+                    value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : enemy.cosmosValue,
+                    lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+                  }]);
+                  setScore(s => s + 100);
+                  setWaveKills(k => {
+                    const newKills = k + 1;
+                    if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                      setWaveNumber(w => w + 1);
+                      return 0;
+                    }
+                    return newKills;
+                  });
+                } else {
+                  // Actualizar salud del enemigo
+                  enemiesRef.current[enemyIndex] = { ...enemy, health: newHealth };
                 }
-                return e;
-              }).filter(e => e !== null) as Enemy[]);
+              }
+              
+              // Actualizar el estado de React
+              setEnemies([...enemiesRef.current]);
             }
           );
         }
@@ -859,95 +1086,78 @@ const SaintSeiyaGame: React.FC = () => {
       // ===== FIN SISTEMA DE RAYO =====
       
       // ===== SISTEMA DE FLECHA DE ORO =====
-      if (upgrades.goldenArrow > 0) {
-        const arrowLevel = upgrades.goldenArrow;
+      if (currentUpgrades.goldenArrow > 0) {
+        const arrowLevel = currentUpgrades.goldenArrow;
         const arrowCooldown = PowerSystem.getGoldenArrowCooldown(arrowLevel);
         
         if (nowLightning - lastGoldenArrowTrigger.current >= arrowCooldown) {
           lastGoldenArrowTrigger.current = nowLightning;
           
-          // Activar flecha de oro
+          // Activar flecha de oro (el daño se aplica en updateGoldenArrows cuando impacta)
           PowerSystem.triggerGoldenArrow(
             currentPlayer.x,
             currentPlayer.y,
             arrowLevel,
             currentEnemies,
-            (enemyId, damage) => {
-              setEnemies(prev => prev.map(e => {
-                if (e.id === enemyId) {
-                  const newHealth = e.health - damage;
-                  if (newHealth <= 0) {
-                    // Crear drop
-                    const rand = Math.random();
-                    setDrops(prevDrops => [...prevDrops, {
-                      id: nextOrbId.current++,
-                      x: e.x,
-                      y: e.y,
-                      type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
-                      value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
-                      lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
-                    }]);
-                    setScore(s => s + 100);
-                    setWaveKills(k => {
-                      const newKills = k + 1;
-                      if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
-                        setWaveNumber(w => w + 1);
-                        return 0;
-                      }
-                      return newKills;
-                    });
-                    return null; // Eliminar enemigo
-                  }
-                  return { ...e, health: newHealth };
-                }
-                return e;
-              }).filter(e => e !== null) as Enemy[]);
-            }
+            () => {} // Callback vacío, el daño se maneja en updateGoldenArrows
           );
         }
       }
       
       // Actualizar flechas doradas (movimiento y colisiones)
+      // Se usa currentEnemies (capturado al inicio del frame) para evitar race conditions
+      const arrowKilledEnemies = new Set<number>();
       PowerSystem.updateGoldenArrows(
         deltaTime,
         currentEnemies,
         (enemyId, damage) => {
-          setEnemies(prev => prev.map(e => {
-            if (e.id === enemyId) {
-              const newHealth = e.health - damage;
-              if (newHealth <= 0) {
-                // Crear drop
-                const rand = Math.random();
-                setDrops(prevDrops => [...prevDrops, {
-                  id: nextOrbId.current++,
-                  x: e.x,
-                  y: e.y,
-                  type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
-                  value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : e.cosmosValue,
-                  lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
-                }]);
-                setScore(s => s + 100);
-                setWaveKills(k => {
-                  const newKills = k + 1;
-                  if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
-                    setWaveNumber(w => w + 1);
-                    return 0;
-                  }
-                  return newKills;
-                });
-                return null; // Eliminar enemigo
+          const enemyIndex = currentEnemies.findIndex(e => e.id === enemyId);
+          if (enemyIndex === -1) return;
+          
+          const enemy = currentEnemies[enemyIndex];
+          const newHealth = enemy.health - damage;
+          
+          if (newHealth <= 0) {
+            // Marcar para eliminar al final del frame
+            arrowKilledEnemies.add(enemyId);
+            
+            // Crear drop
+            const rand = Math.random();
+            setDrops(prevDrops => [...prevDrops, {
+              id: nextOrbId.current++,
+              x: enemy.x,
+              y: enemy.y,
+              type: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? 'health' : 'cosmos',
+              value: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_VALUE : enemy.cosmosValue,
+              lifetime: rand < DROPS_CONFIG.HEALTH_DROP_CHANCE ? DROPS_CONFIG.HEALTH_LIFETIME : DROPS_CONFIG.COSMOS_LIFETIME
+            }]);
+            setScore(s => s + 100);
+            setWaveKills(k => {
+              const newKills = k + 1;
+              if (newKills >= WAVE_CONFIG.ENEMIES_TO_KILL_PER_WAVE) {
+                setWaveNumber(w => w + 1);
+                return 0;
               }
-              return { ...e, health: newHealth };
-            }
-            return e;
-          }).filter(e => e !== null) as Enemy[]);
+              return newKills;
+            });
+          } else {
+            // Actualizar salud del enemigo en el array
+            currentEnemies[enemyIndex] = { ...enemy, health: newHealth };
+          }
         }
       );
+      
+      // Aplicar las eliminaciones de flechas
+      if (arrowKilledEnemies.size > 0) {
+        enemiesRef.current = currentEnemies.filter(e => !arrowKilledEnemies.has(e.id));
+      } else {
+        enemiesRef.current = currentEnemies;
+      }
       // ===== FIN SISTEMA DE FLECHA DE ORO =====
       
       // ===== SISTEMA DE ESCUDO DE ATENA =====
-      if (upgrades.athenaShield > 0) {
-        const shieldLevel = upgrades.athenaShield;
+      if (currentUpgrades.athenaShield > 0) {
+        const shieldLevel = currentUpgrades.athenaShield;
         
         // Inicializar escudos si no existen
         PowerSystem.triggerAthenaShield(
@@ -1002,7 +1212,11 @@ const SaintSeiyaGame: React.FC = () => {
               sprite
             };
             
-            setEnemies(e => [...e, enemy]);
+            setEnemies(e => {
+              const newEnemies = [...e, enemy];
+              enemiesRef.current = newEnemies;
+              return newEnemies;
+            });
             spawned++;
           } else {
             remaining.push(warning);
@@ -1042,7 +1256,8 @@ const SaintSeiyaGame: React.FC = () => {
       let playerDamaged = false;
       let screenShakeNeeded = false;
       
-      for (const enemy of currentEnemies) {
+      // Usar enemiesRef.current que tiene las eliminaciones de las flechas
+      for (const enemy of enemiesRef.current) {
         // Actualizar sprite
         if (enemy.sprite) {
           enemy.sprite.update(deltaTime);
@@ -1562,61 +1777,87 @@ const SaintSeiyaGame: React.FC = () => {
         });
       });
       
-      // ===== RENDERIZADO INMEDIATO EN EL MISMO LOOP =====
-      if (canvasRef.current) {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Actualizar sprite del jugador cada frame
-          if (playerSprite) {
-            playerSprite.update(deltaTime);
+      } // ===== FIN DEL BLOQUE if (shouldUpdateLogic) =====
+      
+      } // ===== FIN DEL BLOQUE if (currentPlayer) =====
+      
+      // ===== RENDERIZADO INMEDIATO EN EL MISMO LOOP (SIEMPRE SE EJECUTA) =====
+      if (!canvasRef.current) {
+        return; // No llamar requestAnimationFrame aquí, ya está al inicio
+      }
+      
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        return; // No llamar requestAnimationFrame aquí, ya está al inicio
+      }
+      
+      // Verificar dimensiones del canvas
+      if (canvas.width === 0 || canvas.height === 0) {
+        return; // No llamar requestAnimationFrame aquí, ya está al inicio
+      }
+      
+      // Actualizar sprite del jugador cada frame
+      const currentPlayerSprite = playerSpriteRef.current;
+      if (currentPlayerSprite) {
+        currentPlayerSprite.update(deltaTime);
         
         // Determinar animación
-        if (isAttacking) {
-          playerSprite.setAnimation('attack');
+        const currentIsAttacking = isAttackingRef.current;
+        if (currentIsAttacking) {
+          currentPlayerSprite.setAnimation('attack');
+        } else if (isMovingFromInput) {
+          currentPlayerSprite.setAnimation('walk');
         } else {
-          const isMoving = keysPressed.has('w') || keysPressed.has('s') || 
-                          keysPressed.has('a') || keysPressed.has('d') ||
-                          keysPressed.has('arrowup') || keysPressed.has('arrowdown') ||
-                          keysPressed.has('arrowleft') || keysPressed.has('arrowright');
-          
-          if (isMoving) {
-            playerSprite.setAnimation('walk');
-          } else {
-            playerSprite.setAnimation('idle');
-          }
+          currentPlayerSprite.setAnimation('idle');
         }
         
-        // Flip sprite según dirección
-        if (keysPressed.has('a') || keysPressed.has('arrowleft')) {
-          playerSprite.flipX = true;
-        } else if (keysPressed.has('d') || keysPressed.has('arrowright')) {
-          playerSprite.flipX = false;
+        // Flip sprite según dirección (considerar tanto teclado como joystick)
+        if (dx < -0.1) {
+          currentPlayerSprite.flipX = true;
+        } else if (dx > 0.1) {
+          currentPlayerSprite.flipX = false;
         }
       }
       
+      // Limpiar canvas con fondo negro
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
       
-      if (gameState === 'playing' || gameState === 'houseclear') {
+      // Si no hay jugador, mostrar mensaje de carga
+      // Redefinir currentPlayer en este scope para renderizado
+      const currentPlayerForRender = playerRef.current;
+      if (!currentPlayerForRender) {
+        ctx.fillStyle = '#FFF';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Cargando...', WIDTH / 2, HEIGHT / 2);
+        return; // No llamar requestAnimationFrame aquí, ya está al inicio
+      }
+      
+      if (gameStateRef.current === 'playing' || gameStateRef.current === 'houseclear') {
         // Guardar estado del canvas
         ctx.save();
         
         // Aplicar transformación de cámara con screen shake
-        ctx.translate(-camera.x + screenShake.x, -camera.y + screenShake.y);
+        const currentCamera = cameraRef.current;
+        const currentScreenShake = screenShakeRef.current;
+        ctx.translate(-currentCamera.x + currentScreenShake.x, -currentCamera.y + currentScreenShake.y);
         
         // Dibujar fondo del mapa con imagen repetida en su tamaño original
-        if (floorImage && floorImage.complete) {
+        const currentFloorImage = floorImageRef.current;
+        if (currentFloorImage && currentFloorImage.complete) {
           ctx.imageSmoothingEnabled = false;
           
           // Calcular cuántas veces necesitamos repetir la imagen
-          const imgWidth = floorImage.width;
-          const imgHeight = floorImage.height;
+          const imgWidth = currentFloorImage.width;
+          const imgHeight = currentFloorImage.height;
           
           // Dibujar la imagen repetida manualmente
           for (let x = 0; x < MAP_WIDTH; x += imgWidth) {
             for (let y = 0; y < MAP_HEIGHT; y += imgHeight) {
-              ctx.drawImage(floorImage, x, y);
+              ctx.drawImage(currentFloorImage, x, y);
             }
           }
         } else {
@@ -1630,8 +1871,9 @@ const SaintSeiyaGame: React.FC = () => {
         
         // Dibujar spawn warnings (advertencias de spawn) - OPTIMIZADO
         const currentTime = Date.now();
-        if (spawnWarnings.length > 0) {
-          spawnWarnings.forEach(warning => {
+        const currentSpawnWarnings = spawnWarningsRef.current;
+        if (currentSpawnWarnings.length > 0) {
+          currentSpawnWarnings.forEach(warning => {
             // Círculo pulsante simplificado
             const pulsePhase = (currentTime % 500) / 500; // Simplificar cálculo
             const pulseSize = 15 + pulsePhase * 5;
@@ -1661,16 +1903,17 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Dibujar jugador con sprite o fallback
-        if (playerSprite) {
-          playerSprite.draw(ctx, player.x, player.y, 64, 64);
+        if (currentPlayerSprite) {
+          currentPlayerSprite.draw(ctx, currentPlayerForRender.x, currentPlayerForRender.y, 64, 64);
         } else {
-          ctx.fillStyle = player.knight.color;
+          ctx.fillStyle = currentPlayerForRender.knight.color;
           ctx.beginPath();
-          ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
+          ctx.arc(currentPlayerForRender.x, currentPlayerForRender.y, 15, 0, Math.PI * 2);
           ctx.fill();
         }
         
-        enemies.forEach(enemy => {
+        const currentEnemies = enemiesRef.current;
+        currentEnemies.forEach(enemy => {
           // Dibujar sprite si existe, o fallback a círculo
           if (enemy.sprite) {
             // Todos los enemigos mismo tamaño que el jugador
@@ -1758,9 +2001,11 @@ const SaintSeiyaGame: React.FC = () => {
           }
         }
         
-        projectiles.forEach(proj => {
+        const currentProjectiles = projectilesRef.current;
+        currentProjectiles.forEach(proj => {
           // ⚡ Trail visual eficiente para proyectiles del jugador (tipo Vampire Survivors)
-          if (!proj.isEnemy && projectileImage && projectileImage.complete) {
+          const currentProjectileImage = projectileImageRef.current;
+          if (!proj.isEnemy && currentProjectileImage && currentProjectileImage.complete) {
             ctx.imageSmoothingEnabled = false;
             const displaySize = 24;
             
@@ -1778,7 +2023,7 @@ const SaintSeiyaGame: React.FC = () => {
             
             // Proyectil principal
             ctx.drawImage(
-              projectileImage,
+              currentProjectileImage,
               proj.x - displaySize/2, proj.y - displaySize/2,
               displaySize, displaySize
             );
@@ -1797,13 +2042,16 @@ const SaintSeiyaGame: React.FC = () => {
         // Dibujar efectos de Rayo de Zeus
         PowerSystem.drawLightning(ctx);
         PowerSystem.drawPowerEffects(ctx);
-        PowerSystem.drawGoldenArrows(ctx);
-        PowerSystem.drawShields(ctx, player.x, player.y);
+        const currentGoldenArrowImage = goldenArrowImageRef.current;
+        PowerSystem.drawGoldenArrows(ctx, currentGoldenArrowImage);
+        PowerSystem.drawShields(ctx, currentPlayerForRender.x, currentPlayerForRender.y);
         
         // Dibujar efectos de ataque del boss (bolas de poder) - limitar a 10 más recientes
-        if (bossAttackImage && bossAttackImage.complete) {
+        const currentBossAttackImage = bossAttackImageRef.current;
+        const currentBossAttackEffects = bossAttackEffectsRef.current;
+        if (currentBossAttackImage && currentBossAttackImage.complete) {
           const now = Date.now();
-          const recentEffects = bossAttackEffects.slice(-10);
+          const recentEffects = currentBossAttackEffects.slice(-10);
           recentEffects.forEach(effect => {
             const age = now - effect.createdAt;
             if (age < 0) return; // No dibujar si aún no ha comenzado (delay)
@@ -1899,7 +2147,8 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Dibujar drops (cosmos, health) - Mejorados visualmente pero sin animaciones
-        drops.forEach(drop => {
+        const currentDrops = dropsRef.current;
+        currentDrops.forEach(drop => {
           if (drop.type === 'health') {
             // Cruz de vida con glow suave
             ctx.shadowBlur = 10;
@@ -1932,9 +2181,12 @@ const SaintSeiyaGame: React.FC = () => {
         });
         
         // Dibujar advertencias de super ataque del boss (SIMPLIFICADO para mejor rendimiento)
-        if (bossSuperAttackWarnings.length > 0) {
+        const currentBossSuperAttackWarnings = bossSuperAttackWarningsRef.current;
+        const currentBossSuperAttacks = bossSuperAttacksRef.current;
+        const currentBossSuperAttackSprites = bossSuperAttackSpritesRef.current;
+        if (currentBossSuperAttackWarnings.length > 0) {
           const now = Date.now();
-          bossSuperAttackWarnings.forEach(warning => {
+          currentBossSuperAttackWarnings.forEach(warning => {
             const age = now - warning.createdAt;
             
             // Efecto de parpadeo simple
@@ -1961,9 +2213,9 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Dibujar super ataques activos del boss (ULTRA-SIMPLIFICADO)
-        if (bossSuperAttacks.length > 0 && bossSuperAttackSprites.length === 3) {
+        if (currentBossSuperAttacks.length > 0 && currentBossSuperAttackSprites.length === 3) {
           const now = Date.now();
-          bossSuperAttacks.forEach(attack => {
+          currentBossSuperAttacks.forEach(attack => {
             const age = now - attack.createdAt;
             const progress = age / attack.duration;
             
@@ -1976,7 +2228,7 @@ const SaintSeiyaGame: React.FC = () => {
             
             // Seleccionar frame
             const frameIndex = Math.min(2, Math.floor(progress * 3));
-            const sprite = bossSuperAttackSprites[frameIndex];
+            const sprite = currentBossSuperAttackSprites[frameIndex];
             
             if (sprite && sprite.complete) {
               ctx.globalAlpha = alpha;
@@ -2033,7 +2285,7 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillRect(10, 10, playerBarWidth, playerBarHeight);
         
         // Vida actual del jugador (gradiente de rojo a verde)
-        const playerHealthPercent = player.health / player.maxHealth;
+        const playerHealthPercent = currentPlayerForRender.health / currentPlayerForRender.maxHealth;
         if (playerHealthPercent > 0) {
           const red = Math.floor(255 * (1 - playerHealthPercent));
           const green = Math.floor(255 * playerHealthPercent);
@@ -2042,20 +2294,20 @@ const SaintSeiyaGame: React.FC = () => {
         }
         
         // Barra de Cosmos (reemplaza exp)
-        const cosmosRequired = 10 + ((player.level - 1) * 5);
+        const cosmosRequired = 10 + ((currentPlayerForRender.level - 1) * 5);
         ctx.fillStyle = '#00F';
         ctx.fillRect(10, 35, 200, 10);
         ctx.fillStyle = '#0FF';
-        ctx.fillRect(10, 35, 200 * (player.cosmos / cosmosRequired), 10);
+        ctx.fillRect(10, 35, 200 * (currentPlayerForRender.cosmos / cosmosRequired), 10);
         
         ctx.fillStyle = '#FFF';
         ctx.font = '16px Arial';
         ctx.textAlign = 'left';
-        ctx.fillText(`Nivel: ${player.level}`, 220, 25);
+        ctx.fillText(`Nivel: ${currentPlayerForRender.level}`, 220, 25);
         ctx.fillText(`Puntos: ${score}`, 220, 45);
         ctx.fillText(`Casa: ${currentHouse + 1}/12`, 10, 60);
         ctx.fillText(`Enemigos eliminados: ${waveKills}`, 10, 75);
-        ctx.fillText(`Enemigos activos: ${enemies.length}`, 10, 90);
+        ctx.fillText(`Enemigos activos: ${enemiesRef.current.length}`, 10, 90);
         
         // Timer del stage con indicador de boss
         const minutes = Math.floor(stageTime / 60);
@@ -2094,46 +2346,171 @@ const SaintSeiyaGame: React.FC = () => {
         ctx.fillStyle = '#FFD700';
         ctx.font = '16px Arial';
         ctx.fillText(`Oleada ${waveNumber}`, WIDTH / 2, 50);
-      }
-        } // Cerrar bloque de ctx
-      } // Cerrar bloque de canvasRef
+      } // Cerrar bloque de ctx
       // ===== FIN RENDERIZADO =====
       
-      // Continuar el loop unificado
-      animationFrameId = requestAnimationFrame(gameLoop);
+      // El loop continúa automáticamente con el requestAnimationFrame al inicio
     };
     
     // Iniciar el loop unificado
+    console.log('🚀 Iniciando animationFrame con gameLoop');
     animationFrameId = requestAnimationFrame(gameLoop);
+    console.log('✅ requestAnimationFrame llamado, ID:', animationFrameId);
     
     return () => {
+      console.log('🧹 Limpiando gameLoop, cancelando animationFrame:', animationFrameId);
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [gameStarted, player, gameState, keysPressed, boss, enemies, waveEnemies, waveKills, upgrades, currentHouse, spawnBoss, gainCosmos, waveNumber, playerSprite, isAttacking, projectileImage, floorImage, camera, stageTime, screenShake, bossAttackImage, bossAttackEffects, bossSuperAttackWarnings, bossSuperAttacks, bossSuperAttackSprites, projectiles, drops, spawnWarnings, score, currentHouse, waveKills]);
+  }, []); // ✅ Array vacío: el gameLoop se ejecuta UNA VEZ y permanece activo
 
-  // Sin menú de selección - el juego comienza automáticamente
+  // Inicializar el juego automáticamente cuando se monta el componente
+  useEffect(() => {
+    console.log('🔍 useEffect initializeGame - gameStarted:', gameStarted, 'player:', player, 'canvas:', canvasRef.current);
+    if (gameStarted && !player) {
+      console.log('✅ Condiciones cumplidas, llamando a initializeGame en 50ms');
+      // Usar setTimeout para asegurar que el canvas esté montado en el DOM
+      const timeoutId = setTimeout(() => {
+        if (canvasRef.current) {
+          console.log('🎮 Llamando a initializeGame()');
+          initializeGame();
+        } else {
+          console.error('❌ Canvas no está montado');
+        }
+      }, 50);
+      
+      return () => clearTimeout(timeoutId);
+    } else {
+      console.log('⚠️ No se llama a initializeGame - gameStarted:', gameStarted, 'player existe:', !!player);
+    }
+  }, [gameStarted, player, initializeGame]);
 
-  if (gameState === 'levelup') {
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ color: '#FFD700', marginBottom: '2rem' }}>¡Nivel Superior!</h1>
-          <h2 style={{ marginBottom: '2rem' }}>Elige una mejora:</h2>
-          <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center' }}>
+  // ===== RENDERIZADO PRINCIPAL CON OVERLAYS =====
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: '#000',
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      overflow: 'hidden',
+      touchAction: 'none'
+    }}>
+      {/* Indicador de carga mientras el jugador no está inicializado */}
+      {isInitializing && (
+        <>
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.6; }
+            }
+          `}</style>
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            color: '#FFD700',
+            fontSize: 'clamp(1.5rem, 5vw, 2rem)',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            zIndex: 10000,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            padding: 'clamp(1rem, 3vw, 2rem)',
+            borderRadius: '10px',
+            border: '2px solid #FFD700',
+            animation: 'pulse 1.5s ease-in-out infinite'
+          }}>
+            🎮 Cargando juego...<br />
+            <span style={{ fontSize: 'clamp(0.8rem, 2vw, 1rem)', color: '#FFF' }}>
+              {isMobile ? 'Modo móvil detectado' : 'Modo escritorio'}
+            </span>
+          </div>
+        </>
+      )}
+      
+      {/* Canvas siempre presente - Adaptable a cualquier orientación */}
+      <canvas
+        ref={canvasRef}
+        width={WIDTH}
+        height={HEIGHT}
+        style={{
+          backgroundColor: '#000',
+          width: isPortrait ? '100vw' : 'auto',
+          height: isPortrait ? 'auto' : '100vh',
+          maxWidth: '100vw',
+          maxHeight: '100vh',
+          display: 'block',
+          imageRendering: 'pixelated',
+          touchAction: 'none',
+          border: isMobile ? 'none' : '2px solid #FFD700',
+          objectFit: 'contain'
+        }}
+      />
+      
+      {/* Controles móviles */}
+      <MobileControls
+        visible={isMobile && gameState === 'playing'}
+        onJoystickMove={(direction) => {
+          setMobileDirection(direction);
+          mobileDirectionRef.current = direction; // Actualizar ref inmediatamente
+        }}
+        onJoystickEnd={() => {
+          setMobileDirection({ x: 0, y: 0 });
+          mobileDirectionRef.current = { x: 0, y: 0 }; // Actualizar ref inmediatamente
+        }}
+      />
+      
+      {/* Overlay de Level Up */}
+      {gameState === 'levelup' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(10, 10, 26, 0.95)',
+          backgroundImage: 'linear-gradient(135deg, rgba(26, 10, 46, 0.95) 0%, rgba(10, 10, 26, 0.95) 50%, rgba(26, 10, 46, 0.95) 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontFamily: 'Arial, sans-serif',
+          padding: 'clamp(0.5rem, 2vw, 1rem)',
+          overflowY: 'auto',
+          zIndex: 9999
+        }}>
+        <div style={{ 
+          textAlign: 'center', 
+          maxWidth: '1200px', 
+          width: '100%',
+          padding: 'clamp(0.5rem, 2vw, 1rem)'
+        }}>
+          <h1 style={{ 
+            color: '#FFD700', 
+            marginBottom: 'clamp(0.5rem, 2vw, 1.5rem)',
+            fontSize: 'clamp(1.5rem, 6vw, 2.5rem)',
+            textShadow: '0 0 20px rgba(255, 215, 0, 0.8), 2px 2px 4px rgba(0, 0, 0, 0.8)'
+          }}>¡Nivel Superior!</h1>
+          <h2 style={{ 
+            marginBottom: 'clamp(0.5rem, 2vw, 1.5rem)',
+            fontSize: 'clamp(0.9rem, 3vw, 1.5rem)'
+          }}>Elige una mejora:</h2>
+          <div style={{ 
+            display: 'flex', 
+            gap: 'clamp(0.5rem, 2vw, 1rem)', 
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            padding: 'clamp(0.25rem, 1vw, 0.5rem)',
+            alignItems: 'stretch'
+          }}>
             {upgradeChoices.map(upgrade => {
               const currentLevel = upgrades[upgrade.id as keyof PlayerUpgrades] || 0;
               const maxLevel = upgrade.levels.length;
@@ -2141,21 +2518,60 @@ const SaintSeiyaGame: React.FC = () => {
               return (
                 <div
                   key={upgrade.id}
-                  onClick={() => selectUpgrade(upgrade.id)}
+                  onClick={() => {
+                    if (currentLevel < maxLevel) {
+                      selectUpgrade(upgrade.id);
+                    }
+                  }}
                   style={{
-                    padding: '2rem',
+                    padding: 'clamp(0.75rem, 2vw, 1.5rem)',
                     border: '3px solid #FFD700',
                     borderRadius: '10px',
                     cursor: currentLevel < maxLevel ? 'pointer' : 'not-allowed',
-                    backgroundColor: '#222',
-                    width: '200px',
-                    opacity: currentLevel < maxLevel ? 1 : 0.5
+                    backgroundColor: currentLevel < maxLevel ? '#1a1a3e' : '#333',
+                    width: 'clamp(140px, 28vw, 220px)',
+                    minWidth: '140px',
+                    opacity: currentLevel < maxLevel ? 1 : 0.6,
+                    flex: '1 1 auto',
+                    maxWidth: '250px',
+                    transition: 'all 0.3s',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.5)',
+                    touchAction: 'manipulation'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentLevel < maxLevel) {
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                      e.currentTarget.style.boxShadow = '0 6px 25px rgba(255, 215, 0, 0.6)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.5)';
                   }}
                 >
-                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>{upgrade.icon}</div>
-                  <h3 style={{ color: '#FFD700' }}>{upgrade.name}</h3>
-                  <p>{upgrade.desc}</p>
-                  <p style={{ marginTop: '1rem', color: '#0FF' }}>
+                  <div style={{ 
+                    fontSize: 'clamp(2rem, 6vw, 3rem)', 
+                    marginBottom: 'clamp(0.25rem, 1vw, 0.5rem)',
+                    lineHeight: 1
+                  }}>{upgrade.icon}</div>
+                  <h3 style={{ 
+                    color: '#FFD700',
+                    fontSize: 'clamp(0.85rem, 2.5vw, 1.2rem)',
+                    marginBottom: 'clamp(0.25rem, 1vw, 0.5rem)',
+                    fontWeight: 'bold'
+                  }}>{upgrade.name}</h3>
+                  <p style={{
+                    fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
+                    marginBottom: 'clamp(0.25rem, 1vw, 0.5rem)',
+                    lineHeight: 1.3,
+                    color: '#ddd'
+                  }}>{upgrade.desc}</p>
+                  <p style={{ 
+                    marginTop: 'clamp(0.25rem, 1vw, 0.5rem)', 
+                    color: '#0FF',
+                    fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
+                    fontWeight: 'bold'
+                  }}>
                     Nivel: {currentLevel}/{maxLevel}
                   </p>
                 </div>
@@ -2163,107 +2579,119 @@ const SaintSeiyaGame: React.FC = () => {
             })}
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (gameState === 'houseclear') {
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ color: '#FFD700', fontSize: '3rem', marginBottom: '2rem' }}>
+        </div>
+      )}
+      
+      {/* Overlay de House Clear */}
+      {gameState === 'houseclear' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(10, 10, 26, 0.95)',
+          backgroundImage: 'linear-gradient(135deg, rgba(26, 10, 46, 0.95) 0%, rgba(10, 10, 26, 0.95) 50%, rgba(26, 10, 46, 0.95) 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontFamily: 'Arial, sans-serif',
+          padding: 'clamp(0.5rem, 2vw, 1rem)',
+          zIndex: 9999
+        }}>
+        <div style={{ textAlign: 'center', maxWidth: '90%' }}>
+          <h1 style={{ 
+            color: '#FFD700', 
+            fontSize: 'clamp(1.5rem, 6vw, 3rem)', 
+            marginBottom: 'clamp(1rem, 3vw, 2rem)' 
+          }}>
             ¡Casa Conquistada!
           </h1>
           {currentHouse < GOLD_SAINTS.length && (
-            <h2 style={{ color: '#0FF' }}>
+            <h2 style={{ 
+              color: '#0FF',
+              fontSize: 'clamp(1rem, 4vw, 1.5rem)'
+            }}>
               Has derrotado a {GOLD_SAINTS[currentHouse - 1]?.name}
             </h2>
           )}
           {currentHouse >= GOLD_SAINTS.length && (
             <div>
-              <h2 style={{ color: '#0FF', marginBottom: '2rem' }}>
+              <h2 style={{ 
+                color: '#0FF', 
+                marginBottom: 'clamp(1rem, 3vw, 2rem)',
+                fontSize: 'clamp(1rem, 4vw, 1.5rem)'
+              }}>
                 ¡Has conquistado las 12 Casas del Santuario!
               </h2>
-              <p style={{ fontSize: '1.5rem' }}>Puntuación Final: {score}</p>
+              <p style={{ fontSize: 'clamp(1rem, 3vw, 1.5rem)' }}>Puntuación Final: {score}</p>
             </div>
           )}
         </div>
-      </div>
-    );
-  }
-
-  if (gameState === 'gameover') {
-    return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.9)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#fff',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ color: '#F00', fontSize: '3rem', marginBottom: '2rem' }}>
+        </div>
+      )}
+      
+      {/* Overlay de Game Over */}
+      {gameState === 'gameover' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(10, 10, 26, 0.95)',
+          backgroundImage: 'linear-gradient(135deg, rgba(26, 10, 46, 0.95) 0%, rgba(10, 10, 26, 0.95) 50%, rgba(26, 10, 46, 0.95) 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontFamily: 'Arial, sans-serif',
+          padding: 'clamp(0.5rem, 2vw, 1rem)',
+          zIndex: 9999
+        }}>
+          <div style={{ textAlign: 'center', maxWidth: '90%' }}>
+          <h1 style={{ 
+            color: '#F00', 
+            fontSize: 'clamp(1.5rem, 6vw, 3rem)', 
+            marginBottom: 'clamp(1rem, 3vw, 2rem)' 
+          }}>
             Game Over
           </h1>
-          <p style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>Puntuación: {score}</p>
-          <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>
+          <p style={{ 
+            fontSize: 'clamp(1rem, 3vw, 1.5rem)', 
+            marginBottom: 'clamp(0.5rem, 2vw, 1rem)' 
+          }}>Puntuación: {score}</p>
+          <p style={{ 
+            fontSize: 'clamp(0.9rem, 2.5vw, 1.2rem)', 
+            marginBottom: 'clamp(1rem, 3vw, 2rem)' 
+          }}>
             Llegaste a la Casa {currentHouse + 1}
           </p>
           <button
             onClick={() => window.location.reload()}
             style={{
-              padding: '1rem 2rem',
-              fontSize: '1.2rem',
+              padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
+              fontSize: 'clamp(1rem, 2.5vw, 1.2rem)',
               backgroundColor: '#FFD700',
               border: 'none',
               borderRadius: '5px',
               cursor: 'pointer',
               color: '#000',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              touchAction: 'manipulation',
+              minHeight: '44px'
             }}
           >
             Reintentar
           </button>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      backgroundColor: '#111'
-    }}>
-      <canvas
-        ref={canvasRef}
-        width={WIDTH}
-        height={HEIGHT}
-        style={{
-          border: '2px solid #FFD700',
-          backgroundColor: '#000'
-        }}
-      />
+        </div>
+      )}
     </div>
   );
 };
