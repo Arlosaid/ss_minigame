@@ -218,50 +218,61 @@ export async function createBossSprite(): Promise<AnimatedSprite> {
   const sprite = new AnimatedSprite();
 
   try {
-    // Cargar frames de idle/walk del boss
+    // Cargar frames de idle del boss (usar los primeros 2 frames de walk)
     const idleFrames = await SpriteManager.loadMultiple([
       `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
       `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`
     ]);
 
-    // Cargar frames de caminar (animación completa)
+    // Cargar frames de caminar (animación completa de 3 frames)
     const walkFrames = await SpriteManager.loadMultiple([
       `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
       `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_3.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_4.png`
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_3.png`
     ]);
 
-    // Cargar frames de ataque (usar walk frames como animación de ataque)
+    // Cargar frames de ataque (usando los sprites de ataque reales)
     const attackFrames = await SpriteManager.loadMultiple([
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_3.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_4.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_1.png`,
-      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_walk_2.png`
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_attack_2.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_attack_3.png`,
+      `${import.meta.env.BASE_URL}assets/sprites/characters/boss/boss_attack_4.png`
     ]);
 
-    // Agregar animaciones
-    sprite.addAnimation('idle', {
-      frames: idleFrames,
-      frameRate: 4,
-      loop: true
-    });
+    // Agregar animaciones solo si se cargaron correctamente
+    if (idleFrames.length > 0) {
+      sprite.addAnimation('idle', {
+        frames: idleFrames,
+        frameRate: 3,
+        loop: true
+      });
+    }
 
-    sprite.addAnimation('walk', {
-      frames: walkFrames,
-      frameRate: 8,
-      loop: true
-    });
+    if (walkFrames.length > 0) {
+      sprite.addAnimation('walk', {
+        frames: walkFrames,
+        frameRate: 8,
+        loop: true
+      });
+    }
 
-    sprite.addAnimation('attack', {
-      frames: attackFrames,
-      frameRate: 15,
-      loop: false
-    });
+    if (attackFrames.length > 0) {
+      sprite.addAnimation('attack', {
+        frames: attackFrames,
+        frameRate: 12,
+        loop: false
+      });
+    }
 
     sprite.setAnimation('idle');
+    console.log('Boss sprite loaded successfully:', {
+      idle: idleFrames.length,
+      walk: walkFrames.length,
+      attack: attackFrames.length
+    });
+    console.log('Boss current frame:', sprite.getCurrentFrame());
+    console.log('Boss sprite has animations:', sprite.getCurrentFrame() !== null);
   } catch (error) {
-    // Silent error handling
+    console.error('Error loading boss sprite:', error);
   }
 
   return sprite;

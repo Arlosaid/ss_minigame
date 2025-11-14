@@ -62,6 +62,10 @@ interface Boss {
   phase: number;
   sprite?: AnimatedSprite; // Sprite del boss
   isAttacking?: boolean; // Estado de ataque
+  targetX?: number; // Posición objetivo X para movimiento
+  targetY?: number; // Posición objetivo Y para movimiento
+  isMoving?: boolean; // Si el boss está en movimiento
+  moveSpeed?: number; // Velocidad de movimiento del boss
 }
 
 interface Projectile {
@@ -220,6 +224,7 @@ const SaintSeiyaGame: React.FC = () => {
   const bossSuperAttackWarningsRef = useRef<BossSuperAttackWarning[]>([]);
   const bossSuperAttacksRef = useRef<BossSuperAttack[]>([]);
   const bossSuperAttackSpritesRef = useRef<HTMLImageElement[]>([]);
+  const bossSpritesRef = useRef<AnimatedSprite | null>(null);
   
   // Refs para estados que se usan en el gameLoop
   const gameStartedRef = useRef<boolean>(true);
@@ -241,6 +246,10 @@ const SaintSeiyaGame: React.FC = () => {
   useEffect(() => {
     playerRef.current = player;
   }, [player]);
+  
+  useEffect(() => {
+    bossSpritesRef.current = bossSprite;
+  }, [bossSprite]);
   
   useEffect(() => {
     bossRef.current = boss;
@@ -389,6 +398,7 @@ const SaintSeiyaGame: React.FC = () => {
       
       // Cargar sprite del boss
       const bSprite = await createBossSprite();
+      console.log('Boss sprite created:', bSprite);
       setBossSprite(bSprite);
       
       // Cargar sprite de proyectil
@@ -485,6 +495,15 @@ const SaintSeiyaGame: React.FC = () => {
     if (currentHouse >= GOLD_SAINTS.length) return;
     
     const gold = GOLD_SAINTS[currentHouse]!;
+    const currentBossSprite = bossSpritesRef.current;
+    
+    // No spawner el boss si el sprite aún no está cargado
+    if (!currentBossSprite) {
+      console.log('Boss sprite not ready yet, waiting...');
+      return;
+    }
+    
+    console.log('Spawning boss with sprite:', currentBossSprite);
     setBoss({
       id: nextEnemyId.current++,
       x: MAP_WIDTH / 2,
@@ -495,14 +514,37 @@ const SaintSeiyaGame: React.FC = () => {
       lastAttack: 0,
       lastSuperAttack: 0,
       phase: 1,
-      sprite: bossSprite || undefined,
-      isAttacking: false
+      sprite: currentBossSprite,
+      isAttacking: false,
+      targetX: MAP_WIDTH / 2,
+      targetY: MAP_HEIGHT / 2,
+      isMoving: false,
+      moveSpeed: 120 // Boss se mueve a 120 unidades por segundo
     });
     setGameState('playing');
     setWaveNumber(1);
     setStageTime(0);
     stageStartTime.current = Date.now();
-  }, [currentHouse, bossSprite]);
+  }, [currentHouse]);
+
+  // Efecto para actualizar el sprite del boss cuando se cargue
+  useEffect(() => {
+    if (bossSprite) {
+      console.log('BossSprite loaded, checking if boss exists');
+      const currentBoss = bossRef.current;
+      if (currentBoss && !currentBoss.sprite) {
+        console.log('Updating boss with loaded sprite');
+        setBoss(b => b ? { ...b, sprite: bossSprite } : null);
+      } else if (!currentBoss) {
+        // Si el sprite se cargó pero el boss aún no existe, verificar si es tiempo de spawnearlo
+        const currentStageTime = stageTimeRef.current;
+        if (currentStageTime >= BOSS_CONFIG.SPAWN_TIME) {
+          console.log('Boss sprite ready and spawn time reached, spawning boss now');
+          spawnBoss();
+        }
+      }
+    }
+  }, [bossSprite, spawnBoss]);
 
   const dropItem = useCallback((x: number, y: number, type: 'cosmos' | 'health', value: number) => {
     setDrops(prev => [...prev, {
@@ -1528,6 +1570,66 @@ const SaintSeiyaGame: React.FC = () => {
       if (currentBoss) {
         const now = Date.now();
         
+        // ===== MOVIMIENTO DEL BOSS =====
+        // Si no está atacando, el boss se mueve alrededor de la arena
+        if (!currentBoss.isAttacking) {
+          const distToTarget = Math.hypot(
+            (currentBoss.targetX || currentBoss.x) - currentBoss.x,
+            (currentBoss.targetY || currentBoss.y) - currentBoss.y
+          );
+          
+          // Si llegó al objetivo, elegir nuevo punto aleatorio después de una pequeña pausa
+          if (distToTarget < 10) {
+            // Elegir nueva posición aleatoria pero no muy lejos del centro
+            const centerX = MAP_WIDTH / 2;
+            const centerY = MAP_HEIGHT / 2;
+            const maxRadius = 250; // Máxima distancia del centro
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * maxRadius;
+            
+            setBoss(b => {
+              if (!b) return b;
+              
+              // Cambiar a idle cuando llega al destino
+              if (b.sprite && b.isMoving) {
+                b.sprite.setAnimation('idle');
+              }
+              
+              return {
+                ...b,
+                targetX: centerX + Math.cos(angle) * radius,
+                targetY: centerY + Math.sin(angle) * radius,
+                isMoving: false
+              };
+            });
+          } else {
+            // Moverse hacia el objetivo
+            const moveSpeed = currentBoss.moveSpeed || 120;
+            const angle = Math.atan2(
+              (currentBoss.targetY || currentBoss.y) - currentBoss.y,
+              (currentBoss.targetX || currentBoss.x) - currentBoss.x
+            );
+            
+            const moveDistance = Math.min(distToTarget, moveSpeed * deltaTime);
+            const newX = currentBoss.x + Math.cos(angle) * moveDistance;
+            const newY = currentBoss.y + Math.sin(angle) * moveDistance;
+            
+            setBoss(b => {
+              if (!b) return b;
+              
+              // Actualizar animación a walk si se está moviendo
+              if (b.sprite) {
+                b.sprite.setAnimation('walk');
+                // Flip sprite según dirección
+                b.sprite.flipX = angle > Math.PI / 2 || angle < -Math.PI / 2;
+              }
+              
+              return { ...b, x: newX, y: newY, isMoving: true };
+            });
+          }
+        }
+        // ===== FIN MOVIMIENTO DEL BOSS =====
+        
         // Super ataque cada 10 segundos
         if (now - currentBoss.lastSuperAttack > BOSS_CONFIG.SUPER_ATTACK_INTERVAL) {
           setBoss(b => {
@@ -1606,9 +1708,9 @@ const SaintSeiyaGame: React.FC = () => {
                   scale: 1
                 });
               }
-            } else if (pattern === 1) {
+            } else if (pattern === 1 && currentPlayer) {
               // Patrón direccional: 5 bolas hacia el jugador
-              const angle = Math.atan2(player.y - b.y, player.x - b.x);
+              const angle = Math.atan2(currentPlayer.y - b.y, currentPlayer.x - b.x);
               for (let i = -2; i <= 2; i++) {
                 newProjectiles.push({
                   id: nextProjectileId.current++,
@@ -1627,8 +1729,8 @@ const SaintSeiyaGame: React.FC = () => {
                   id: nextBossEffectId.current++,
                   x: b.x,
                   y: b.y,
-                  targetX: player.x + Math.cos(angle + i * 0.2) * 100,
-                  targetY: player.y + Math.sin(angle + i * 0.2) * 100,
+                  targetX: currentPlayer.x + Math.cos(angle + i * 0.2) * 100,
+                  targetY: currentPlayer.y + Math.sin(angle + i * 0.2) * 100,
                   createdAt: Date.now() + i * 50, // Delay escalonado
                   duration: 700,
                   angle: angle + i * 0.2,
@@ -1669,13 +1771,18 @@ const SaintSeiyaGame: React.FC = () => {
             setProjectiles(prev => [...prev, ...newProjectiles]);
             setBossAttackEffects(prev => [...prev, ...newEffects]);
             
-            // Marcar como atacando y volver a idle después
-            const updatedBoss = { ...b, lastAttack: now, isAttacking: true };
+            // Marcar como atacando y volver a la animación apropiada después
+            const updatedBoss = { ...b, lastAttack: now, isAttacking: true, isMoving: false };
             setTimeout(() => {
               setBoss(current => {
                 if (!current) return current;
                 if (current.sprite) {
-                  current.sprite.setAnimation('idle');
+                  // Volver a walk si hay distancia al objetivo, sino idle
+                  const distToTarget = Math.hypot(
+                    (current.targetX || current.x) - current.x,
+                    (current.targetY || current.y) - current.y
+                  );
+                  current.sprite.setAnimation(distToTarget > 10 ? 'walk' : 'idle');
                 }
                 return { ...current, isAttacking: false };
               });
@@ -1745,7 +1852,7 @@ const SaintSeiyaGame: React.FC = () => {
           const age = now - attack.createdAt;
           
           // Verificar si el jugador está dentro del área de ataque
-          if (age < attack.duration) {
+          if (age < attack.duration && player) {
             // Calcular si el jugador colisiona con el rectángulo rotado
             const dx = player.x - attack.x;
             const dy = player.y - attack.y;
@@ -1951,16 +2058,56 @@ const SaintSeiyaGame: React.FC = () => {
           }
         });
         
+        const boss = bossRef.current; // Use ref instead of stale state
         if (boss) {
           // Dibujar sprite del boss si existe
           if (boss.sprite) {
             const bossSize = 96; // Boss más grande que jugador y enemigos
-            boss.sprite.draw(ctx, boss.x, boss.y, bossSize, bossSize);
+            
+            // Intentar dibujar, con fallback si falla
+            const frame = boss.sprite.getCurrentFrame();
+            const cameraPos = cameraRef.current;
+            console.log('Boss render debug:', {
+              hasSprite: !!boss.sprite,
+              hasFrame: !!frame,
+              frameComplete: frame?.complete,
+              frameSrc: frame?.src,
+              bossPos: { x: boss.x, y: boss.y },
+              camera: { x: cameraPos.x, y: cameraPos.y },
+              screenPos: { 
+                x: boss.x - cameraPos.x, 
+                y: boss.y - cameraPos.y 
+              },
+              currentAnimation: (boss.sprite as any).currentAnimation,
+              frameIndex: (boss.sprite as any).currentFrame
+            });
+            if (frame && frame.complete) {
+              console.log('Drawing boss sprite at', boss.x, boss.y);
+              boss.sprite.draw(ctx, boss.x, boss.y, bossSize, bossSize);
+            } else {
+              // Fallback visual si el sprite no está listo
+              console.warn('Boss sprite not ready, using fallback', { frame, complete: frame?.complete });
+              ctx.fillStyle = boss.gold.color;
+              ctx.globalAlpha = 0.8;
+              ctx.beginPath();
+              ctx.arc(boss.x, boss.y, 40, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+              
+              // Efecto de brillo
+              ctx.fillStyle = '#FFF';
+              ctx.globalAlpha = 0.3;
+              ctx.beginPath();
+              ctx.arc(boss.x, boss.y, 30, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
           } else {
             // Fallback: círculo con color del gold saint
+            console.warn('Boss has no sprite, using fallback circle');
             ctx.fillStyle = boss.gold.color;
             ctx.beginPath();
-            ctx.arc(boss.x, boss.y, 30, 0, Math.PI * 2);
+            ctx.arc(boss.x, boss.y, 40, 0, Math.PI * 2);
             ctx.fill();
           }
           
@@ -2112,14 +2259,16 @@ const SaintSeiyaGame: React.FC = () => {
             ctx.stroke();
             
             // Dibujar el sprite de ataque con rotación continua
-            ctx.globalAlpha = opacity;
-            ctx.translate(currentX, currentY);
-            ctx.rotate(age / 80); // Rotación más rápida
-            ctx.drawImage(
-              bossAttackImage,
-              -size/2, -size/2,
-              size, size
-            );
+            if (bossAttackImage && bossAttackImage.complete) {
+              ctx.globalAlpha = opacity;
+              ctx.translate(currentX, currentY);
+              ctx.rotate(age / 80); // Rotación más rápida
+              ctx.drawImage(
+                bossAttackImage,
+                -size/2, -size/2,
+                size, size
+              );
+            }
             
             ctx.restore();
             
