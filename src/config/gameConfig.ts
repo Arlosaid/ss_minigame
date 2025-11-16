@@ -99,7 +99,7 @@ export const ENEMY_CONFIG = {
 // ============================================
 export const BOSS_CONFIG = {
   // Aparición
-  SPAWN_TIME: 180, // Segundos después de iniciar el stage (3 minutos)
+  SPAWN_TIME: 120, // Segundos después de iniciar el stage (2 minutos)
   
   // Estadísticas
   BASE_HP: 1200, // HP balanceado para ser desafiante pero vencible

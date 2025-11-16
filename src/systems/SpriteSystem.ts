@@ -110,6 +110,9 @@ export class AnimatedSprite {
   ): void {
     const frame = this.getCurrentFrame();
     if (!frame) return;
+    
+    // Verificar que la imagen esté completamente cargada
+    if (!frame.complete || frame.naturalWidth === 0) return;
 
     ctx.save();
     
@@ -138,6 +141,8 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
       `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_idle.png`
     ]);
 
+    console.log('✅ Sprite del jugador cargado:', idleFrames.length, 'frames');
+
     // Cargar frames de caminar (solo 2 frames)
     const walkPaths = [
       `${import.meta.env.BASE_URL}assets/sprites/characters/seiya/player_walk_1.png`,
@@ -151,7 +156,7 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
         const frame = await SpriteManager.loadImage(path);
         walkFrames.push(frame);
       } catch (error) {
-        // Silent fallback
+        console.warn('⚠️ No se pudo cargar frame de walk:', path);
       }
     }
 
@@ -182,8 +187,7 @@ export async function createPlayerSprite(): Promise<AnimatedSprite> {
 
     sprite.setAnimation('idle');
   } catch (error) {
-    // Silent error handling
-    // Si falla, usar fallback vacío
+    console.error('❌ Error al cargar sprite del jugador:', error);
   }
 
   return sprite;
@@ -200,6 +204,8 @@ export async function createEnemySprite(_type?: string): Promise<AnimatedSprite>
       `${import.meta.env.BASE_URL}assets/sprites/characters/enemy_1/enemy_walk_4.png`
     ]);
 
+    console.log('✅ Sprite del enemigo cargado:', walkFrames.length, 'frames');
+
     sprite.addAnimation('walk', {
       frames: walkFrames,
       frameRate: 8,
@@ -208,7 +214,7 @@ export async function createEnemySprite(_type?: string): Promise<AnimatedSprite>
 
     sprite.setAnimation('walk');
   } catch (error) {
-    // Silent error handling
+    console.error('❌ Error al cargar sprite del enemigo:', error);
   }
 
   return sprite;
@@ -260,8 +266,10 @@ export async function createBossSprite(): Promise<AnimatedSprite> {
     });
 
     sprite.setAnimation('idle');
+    
+    console.log('✅ Sprite del boss cargado');
   } catch (error) {
-    // Silent error handling
+    console.error('❌ Error al cargar sprite del boss:', error);
   }
 
   return sprite;

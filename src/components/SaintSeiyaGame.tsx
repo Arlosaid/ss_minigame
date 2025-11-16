@@ -335,6 +335,9 @@ const SaintSeiyaGame: React.FC = () => {
   const initializeGame = useCallback(async () => {
     setIsInitializing(true); // Marcar que estamos inicializando
     
+    console.log('🎮 Inicializando juego...');
+    console.log('📁 BASE_URL:', import.meta.env.BASE_URL);
+    
     // Usar el primer caballero por defecto (Seiya)
     const knight = BRONZE_KNIGHTS[0]!;
     const initialX = MAP_WIDTH / 2;
@@ -391,56 +394,82 @@ const SaintSeiyaGame: React.FC = () => {
       const bSprite = await createBossSprite();
       setBossSprite(bSprite);
       
+      // Usar Promise.all para esperar a que TODAS las imágenes se carguen
+      const imageLoadPromises: Promise<void>[] = [];
+      
       // Cargar sprite de proyectil
-      const projImg = new Image();
-      projImg.onload = () => {
-        setProjectileImage(projImg);
-      };
-      projImg.onerror = () => {};
-      projImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/attack_1.png`;
+      const projImgPromise = new Promise<void>((resolve) => {
+        const projImg = new Image();
+        projImg.onload = () => {
+          setProjectileImage(projImg);
+          resolve();
+        };
+        projImg.onerror = () => resolve(); // Resolver incluso en error
+        projImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/attack_1.png`;
+      });
+      imageLoadPromises.push(projImgPromise);
       
       // Cargar sprite de ataque del boss
-      const bossAttackImg = new Image();
-      bossAttackImg.onload = () => {
-        setBossAttackImage(bossAttackImg);
-      };
-      bossAttackImg.onerror = () => {};
-      bossAttackImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_attack.png`;
+      const bossAttackImgPromise = new Promise<void>((resolve) => {
+        const bossAttackImg = new Image();
+        bossAttackImg.onload = () => {
+          setBossAttackImage(bossAttackImg);
+          resolve();
+        };
+        bossAttackImg.onerror = () => resolve();
+        bossAttackImg.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_attack.png`;
+      });
+      imageLoadPromises.push(bossAttackImgPromise);
       
       // Cargar sprites de super ataque del boss (animación de 3 frames)
-      const superAttackSprites: HTMLImageElement[] = [];
+      const superAttackPromises: Promise<HTMLImageElement>[] = [];
       for (let i = 1; i <= 3; i++) {
-        const img = new Image();
-        img.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_super_attack${i}.png`;
-        img.onload = () => {
-          if (i === 3) {
-            setBossSuperAttackSprites([...superAttackSprites]);
-          }
-        };
-        img.onerror = () => {};
-        superAttackSprites.push(img);
+        const promise = new Promise<HTMLImageElement>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(img); // Resolver incluso en error
+          img.src = `${import.meta.env.BASE_URL}assets/sprites/attacks/boss_super_attack${i}.png`;
+        });
+        superAttackPromises.push(promise);
       }
       
+      const superAttackSprites = await Promise.all(superAttackPromises);
+      setBossSuperAttackSprites(superAttackSprites);
+      
       // Cargar imagen de la flecha de Sagitario
-      const arrowImg = new Image();
-      arrowImg.onload = () => {
-        setGoldenArrowImage(arrowImg);
-      };
-      arrowImg.onerror = () => {};
-      arrowImg.src = `${import.meta.env.BASE_URL}assets/skills/flecha_sagitario.png`;
+      const arrowImgPromise = new Promise<void>((resolve) => {
+        const arrowImg = new Image();
+        arrowImg.onload = () => {
+          setGoldenArrowImage(arrowImg);
+          resolve();
+        };
+        arrowImg.onerror = () => resolve();
+        arrowImg.src = `${import.meta.env.BASE_URL}assets/skills/flecha_sagitario.png`;
+      });
+      imageLoadPromises.push(arrowImgPromise);
       
       // Cargar imagen del floor
-      const floorImg = new Image();
-      floorImg.onload = () => {
-        setFloorImage(floorImg);
-      };
-      floorImg.onerror = () => {};
-      floorImg.src = `${import.meta.env.BASE_URL}assets/sprites/stages/floor_1_stage.png`;
+      const floorImgPromise = new Promise<void>((resolve) => {
+        const floorImg = new Image();
+        floorImg.onload = () => {
+          setFloorImage(floorImg);
+          resolve();
+        };
+        floorImg.onerror = () => resolve();
+        floorImg.src = `${import.meta.env.BASE_URL}assets/sprites/stages/floor_1_stage.png`;
+      });
+      imageLoadPromises.push(floorImgPromise);
       
-      // ✅ Marcar inicialización completa DESPUÉS de cargar sprites críticos
+      // ✅ Esperar a que TODAS las imágenes se carguen antes de marcar como completo
+      await Promise.all(imageLoadPromises);
+      
+      console.log('✅ Todos los assets cargados correctamente');
+      
+      // ✅ Marcar inicialización completa DESPUÉS de cargar TODO
       setIsInitializing(false);
     } catch (error) {
-      // Error silencioso al cargar sprites, pero igual iniciar el juego
+      console.error('❌ Error al cargar assets:', error);
+      // Incluso en error, marcar como completo para no bloquear el juego
       setIsInitializing(false);
     }
   }, []);
