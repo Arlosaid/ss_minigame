@@ -91,12 +91,12 @@ const ArenaGame: React.FC = () => {
       velocity: { x: 0, y: 0 },
       size: 25,
       stats: {
-        maxHp: 100,
-        currentHp: 100,
-        damage: 12, // Reducido de 15 a 12
-        speed: 200,
-        attackRange: 150,
-        attackSpeed: 2
+        maxHp: 60, // REDUCIDO - Jugador frágil al inicio
+        currentHp: 60, // REDUCIDO - Jugador frágil al inicio
+        damage: 50, // AUMENTADO - One-shot enemigos básicos
+        speed: 120, // MUY REDUCIDO - Jugador MUY lento, OBLIGA a moverse tácticamente
+        attackRange: 120, // Ajustado según gameConfig
+        attackSpeed: 2 // Velocidad de ataque base
       },
       isAttacking: false,
       attackCooldown: 0,
@@ -173,6 +173,7 @@ const ArenaGame: React.FC = () => {
       MovementSystem.updateEnemyMovement(
         enemy,
         state.player,
+        state.enemies,
         deltaTime,
         ARENA_WIDTH,
         ARENA_HEIGHT

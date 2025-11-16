@@ -93,62 +93,62 @@ export class UpgradeSystem {
     {
       id: 'damage_boost',
       name: 'Puño de Pegaso',
-      description: '+15% Daño',
+      description: '+12% Daño',
       icon: '👊',
       tier: 1,
       type: 'stat',
-      maxLevel: 10,
+      maxLevel: 12,
       apply: (player: Player) => {
-        player.stats.damage *= 1.15;
+        player.stats.damage *= 1.12; // Reducido de 15% a 12% para progresión más lenta
       }
     },
     {
       id: 'speed_boost',
       name: 'Velocidad de Meteoro',
-      description: '+20% Velocidad de Movimiento',
+      description: '+15% Velocidad de Movimiento',
       icon: '🏃',
       tier: 1,
       type: 'stat',
-      maxLevel: 8,
+      maxLevel: 10,
       apply: (player: Player) => {
-        player.stats.speed *= 1.2;
+        player.stats.speed *= 1.15; // Reducido de 20% a 15% - jugador empieza lento
       }
     },
     {
       id: 'range_boost',
       name: 'Alcance Extendido',
-      description: '+25% Rango de Ataque',
+      description: '+20% Rango de Ataque',
       icon: '🎯',
       tier: 1,
       type: 'stat',
-      maxLevel: 6,
+      maxLevel: 8,
       apply: (player: Player) => {
-        player.stats.attackRange *= 1.25;
+        player.stats.attackRange *= 1.20; // Reducido de 25% a 20%
       }
     },
     {
       id: 'attack_speed',
       name: 'Combo Rápido',
-      description: '+30% Velocidad de Ataque',
+      description: '+25% Velocidad de Ataque',
       icon: '⚔️',
       tier: 1,
       type: 'stat',
-      maxLevel: 8,
+      maxLevel: 10,
       apply: (player: Player) => {
-        player.stats.attackSpeed *= 1.3;
+        player.stats.attackSpeed *= 1.25; // Reducido de 30% a 25%
       }
     },
     {
       id: 'health_boost',
       name: 'Armadura Dorada',
-      description: '+50 HP Máximos',
+      description: '+25 HP Máximos',
       icon: '🛡️',
       tier: 1,
       type: 'stat',
-      maxLevel: 10,
+      maxLevel: 15,
       apply: (player: Player) => {
-        player.stats.maxHp += 50;
-        player.stats.currentHp += 50;
+        player.stats.maxHp += 25; // Reducido de 50 a 25 HP - jugador empieza con 60 HP
+        player.stats.currentHp += 25;
       }
     },
     {

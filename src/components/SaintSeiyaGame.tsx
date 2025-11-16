@@ -1608,7 +1608,7 @@ const SaintSeiyaGame: React.FC = () => {
               }
             } else if (pattern === 1) {
               // Patrón direccional: 5 bolas hacia el jugador
-              const angle = Math.atan2(player.y - b.y, player.x - b.x);
+              const angle = Math.atan2(currentPlayer.y - b.y, currentPlayer.x - b.x);
               for (let i = -2; i <= 2; i++) {
                 newProjectiles.push({
                   id: nextProjectileId.current++,
@@ -1627,8 +1627,8 @@ const SaintSeiyaGame: React.FC = () => {
                   id: nextBossEffectId.current++,
                   x: b.x,
                   y: b.y,
-                  targetX: player.x + Math.cos(angle + i * 0.2) * 100,
-                  targetY: player.y + Math.sin(angle + i * 0.2) * 100,
+                  targetX: currentPlayer.x + Math.cos(angle + i * 0.2) * 100,
+                  targetY: currentPlayer.y + Math.sin(angle + i * 0.2) * 100,
                   createdAt: Date.now() + i * 50, // Delay escalonado
                   duration: 700,
                   angle: angle + i * 0.2,
@@ -1747,8 +1747,8 @@ const SaintSeiyaGame: React.FC = () => {
           // Verificar si el jugador está dentro del área de ataque
           if (age < attack.duration) {
             // Calcular si el jugador colisiona con el rectángulo rotado
-            const dx = player.x - attack.x;
-            const dy = player.y - attack.y;
+            const dx = currentPlayer.x - attack.x;
+            const dy = currentPlayer.y - attack.y;
             
             // Rotar el punto del jugador al sistema de coordenadas del ataque
             const cos = Math.cos(-attack.angle);

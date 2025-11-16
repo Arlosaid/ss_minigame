@@ -49,8 +49,8 @@ export class Player {
     this.expToNext = state.expToNext;
     this.level = state.level;
     
-    // Velocidad base en píxeles por segundo
-    this.speed = 300;
+    // Velocidad base en píxeles por segundo - MUY LENTO, obliga a moverse
+    this.speed = 120;
     this.direction = { x: 0, y: 0 };
     this.isMoving = false;
     this.sprite = null;
@@ -90,8 +90,8 @@ export class Player {
       const normX = this.direction.x / magnitude;
       const normY = this.direction.y / magnitude;
       
-      // Aplicar velocidad con bonus de upgrades
-      const totalSpeed = this.speed + speedBonus * 20;
+      // Aplicar velocidad con bonus de upgrades - más impactante
+      const totalSpeed = this.speed + speedBonus * 35;
       
       // Calcular nuevo movimiento usando deltaTime
       const moveX = normX * totalSpeed * deltaTime;
@@ -143,7 +143,9 @@ export class Player {
     if (this.exp >= this.expToNext) {
       this.exp -= this.expToNext;
       this.level++;
-      this.expToNext = Math.floor(this.expToNext * 1.2);
+      // Fórmula exponencial: progresión más lenta (nivel^1.45)
+      // Nivel 1->2: 15, 2->3: 19, 3->4: 24, 5->6: 38, 10->11: 103, etc.
+      this.expToNext = 10 + Math.floor(3 * Math.pow(this.level, 1.45));
       return true; // Indica que subió de nivel
     }
     

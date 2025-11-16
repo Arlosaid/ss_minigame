@@ -1,4 +1,5 @@
 import { Enemy, Player } from '../types/game';
+import { enemySteeringSystem } from './EnemySteeringSystem';
 import { PhysicsSystem } from './PhysicsSystem';
 
 export class MovementSystem {
@@ -34,13 +35,17 @@ export class MovementSystem {
   static updateEnemyMovement(
     enemy: Enemy,
     player: Player,
+    allEnemies: Enemy[],
     deltaTime: number,
     arenaWidth: number,
     arenaHeight: number
   ): void {
+    let handledBySteering = false;
+
     switch (enemy.movePattern) {
       case 'chase':
-        this.chasePlayer(enemy, player);
+        enemySteeringSystem.updateEnemyPosition(enemy, player, allEnemies, deltaTime);
+        handledBySteering = true;
         break;
       case 'strafe':
         this.strafeAroundPlayer(enemy, player);
@@ -54,11 +59,16 @@ export class MovementSystem {
       case 'stationary':
         // No se mueve
         break;
+      default:
+        enemySteeringSystem.updateEnemyPosition(enemy, player, allEnemies, deltaTime);
+        handledBySteering = true;
+        break;
     }
 
-    // Aplicar velocidad
-    enemy.position.x += enemy.velocity.x * deltaTime;
-    enemy.position.y += enemy.velocity.y * deltaTime;
+    if (!handledBySteering) {
+      enemy.position.x += enemy.velocity.x * deltaTime;
+      enemy.position.y += enemy.velocity.y * deltaTime;
+    }
 
     // Mantener en arena
     enemy.position = PhysicsSystem.clampToArena(
