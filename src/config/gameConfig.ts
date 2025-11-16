@@ -10,12 +10,12 @@
 // ============================================
 export const PLAYER_CONFIG = {
   // Movimiento
-  BASE_SPEED: 140, // Píxeles por segundo (velocidad base)
-  SPEED_UPGRADE_MULTIPLIER: 0.5, // Multiplicador por nivel de upgrade de velocidad
+  BASE_SPEED: 120, // Píxeles por segundo (velocidad base) - MUY LENTO, OBLIGA a moverse tácticamente
+  SPEED_UPGRADE_MULTIPLIER: 0.8, // Multiplicador por nivel de upgrade de velocidad - más impactante
   
   // Combate
-  BASE_DAMAGE: 30, // Daño base del jugador - ajustado para one-shot inicial
-  DAMAGE_UPGRADE_BONUS: 8, // Daño adicional por nivel de upgrade
+  BASE_DAMAGE: 50, // Daño base del jugador - ONE-SHOT enemigos básicos al inicio
+  DAMAGE_UPGRADE_BONUS: 5, // Daño adicional por nivel de upgrade - progresión más lenta
   
   // Disparo
   BASE_FIRE_RATE: 500, // Milisegundos entre disparos
@@ -29,14 +29,14 @@ export const PLAYER_CONFIG = {
   MAX_PROJECTILES: 30, // Límite de proyectiles simultáneos
   
   // Vida
-  STARTING_HEALTH: 100, // Vida inicial balanceada para progresión
-  STARTING_MAX_HEALTH: 100,
-  MAX_HEALTH_UPGRADE_BONUS: 50, // HP adicional por nivel de upgrade
+  STARTING_HEALTH: 60, // Vida inicial BAJA - jugador frágil al inicio
+  STARTING_MAX_HEALTH: 60,
+  MAX_HEALTH_UPGRADE_BONUS: 30, // HP adicional por nivel de upgrade
   
   // Progresión
   STARTING_LEVEL: 1,
-  BASE_COSMOS_REQUIRED: 8, // Cosmos requerido para nivel 1 - más rápido
-  COSMOS_INCREMENT_PER_LEVEL: 4, // Incremento de cosmos requerido por nivel - progresión más rápida
+  BASE_COSMOS_REQUIRED: 10, // Cosmos requerido para nivel 1 - progresión más lenta
+  COSMOS_INCREMENT_PER_LEVEL: 3, // Incremento lineal base - se usa fórmula exponencial
 } as const;
 
 // ============================================
@@ -44,46 +44,46 @@ export const PLAYER_CONFIG = {
 // ============================================
 export const ENEMY_CONFIG = {
   // Spawn
-  BASE_SPAWN_INTERVAL: 1200, // Milisegundos entre spawns (oleada 1) - frecuente
-  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 100, // Reducción del intervalo por oleada - progresión moderada
-  MIN_SPAWN_INTERVAL: 400, // Intervalo mínimo (ms) - spawn constante
+  BASE_SPAWN_INTERVAL: 1200, // Milisegundos entre spawns (oleada 1) - ACCIÓN desde el inicio
+  SPAWN_INTERVAL_REDUCTION_PER_WAVE: 80, // Reducción del intervalo por oleada - progresión moderada
+  MIN_SPAWN_INTERVAL: 400, // Intervalo mínimo (ms) - spawn constante en oleadas altas
   SPAWN_DISTANCE_MIN: 350, // Distancia mínima de spawn desde el jugador
   SPAWN_DISTANCE_MAX: 500, // Distancia máxima de spawn desde el jugador
   WARNING_DURATION: 500, // Duración de la advertencia de spawn (ms) - reducido para spawns rápidos
   
   // Límites
-  BASE_MAX_ACTIVE_ENEMIES: 12, // Máximo de enemigos activos en oleada 1 - oleadas manejables
+  BASE_MAX_ACTIVE_ENEMIES: 15, // Máximo de enemigos activos en oleada 1 - ACCIÓN INMEDIATA
   MAX_ACTIVE_ENEMIES_INCREMENT: 2, // Incremento por oleada - progresión gradual
-  MAX_ACTIVE_ENEMIES_CAP: 25, // Máximo absoluto de enemigos - hordas grandes pero no abrumadoras
+  MAX_ACTIVE_ENEMIES_CAP: 35, // Máximo absoluto de enemigos - equilibrado
   MAX_WARNINGS: 10, // Máximo de advertencias de spawn simultáneas
   CLEANUP_DISTANCE: 1200, // Distancia para limpiar enemigos lejanos
   
-  // Escalado de dificultad - PROGRESIÓN SUAVE Y DIVERTIDA
-  HP_MULTIPLIER_PER_WAVE: 0.15, // +15% HP por oleada - escalado más suave
-  SPEED_MULTIPLIER_PER_WAVE: 0.05, // +5% velocidad por oleada - enemigos más predecibles
+  // Escalado de dificultad - PROGRESIÓN AGRESIVA
+  HP_MULTIPLIER_PER_WAVE: 0.20, // +20% HP por oleada - escalado agresivo
+  SPEED_MULTIPLIER_PER_WAVE: 0.08, // +8% velocidad por oleada - cada vez más peligrosos
   
   // Tipos de enemigos - ONE-SHOT INICIAL Y ESCALADO PROGRESIVO
   NORMAL: {
-    BASE_HP: 30, // Muere con 1 golpe inicial (BASE_DAMAGE=30)
-    HP_PER_WAVE: 8, // Escalado moderado
+    BASE_HP: 50, // Muere con 1 golpe inicial (BASE_DAMAGE=50)
+    HP_PER_WAVE: 12, // Escalado agresivo - rápido aumento de dificultad
     SPEED: 0.85, // Velocidad base normal
-    COSMOS_MIN: 3, // Aumentado para progresión más rápida
-    COSMOS_MAX: 5, // Aumentado para progresión más rápida
+    COSMOS_MIN: 4, // Aumentado para compensar niveles más lentos
+    COSMOS_MAX: 6, // Aumentado para compensar niveles más lentos
   },
   FAST: {
-    BASE_HP: 25, // Rápido y frágil
-    HP_PER_WAVE: 6, // Escalado menor
+    BASE_HP: 40, // One-shot inicial, rápido y frágil
+    HP_PER_WAVE: 10, // Escalado moderado
     SPEED: 1.5, // Rápido pero no imposible de esquivar
-    COSMOS_MIN: 4, // Aumentado
-    COSMOS_MAX: 7, // Aumentado
+    COSMOS_MIN: 5, // Más cosmos por ser más peligroso
+    COSMOS_MAX: 8,
     UNLOCK_WAVE: 2, // Se desbloquea en oleada 2
   },
   TANK: {
-    BASE_HP: 60, // Tank inicial requiere 2 golpes
-    HP_PER_WAVE: 12, // Escalado mayor
+    BASE_HP: 120, // Tank inicial requiere 3 golpes - PELIGROSO
+    HP_PER_WAVE: 20, // Escalado muy agresivo
     SPEED: 0.5, // Lento pero resistente
-    COSMOS_MIN: 7, // Aumentado
-    COSMOS_MAX: 10, // Aumentado
+    COSMOS_MIN: 8, // Recompensa alta
+    COSMOS_MAX: 12,
     UNLOCK_WAVE: 3, // Se desbloquea en oleada 3
   },
   
@@ -176,8 +176,8 @@ export const PROJECTILE_CONFIG = {
 // 🌊 CONFIGURACIÓN DE OLEADAS
 // ============================================
 export const WAVE_CONFIG = {
-  ENEMIES_TO_KILL_PER_WAVE: 30, // Enemigos a matar para avanzar de oleada - balanceado
-  SPECIAL_ENEMY_CHANCE_AFTER_WAVE_5: 0.3, // 30% de enemigos especiales en oleadas altas
+  ENEMIES_TO_KILL_PER_WAVE: 20, // Enemigos a matar para avanzar de oleada - progresión más rápida
+  SPECIAL_ENEMY_CHANCE_AFTER_WAVE_5: 0.4, // 40% de enemigos especiales en oleadas altas
   POST_BOSS_DIFFICULTY_MULTIPLIER: 1.5, // Multiplicador de dificultad después del primer boss
   BOSS_DEFEATED_WAVE_INCREMENT: 5, // Incremento de oleada al derrotar al boss
 } as const;
@@ -328,9 +328,14 @@ export function calculateEnemySpeed(
 
 /**
  * Calcula el cosmos requerido para subir de nivel
+ * Usa una curva exponencial: progresión moderada al inicio, exponencial después
+ * Nivel 1: 15, Nivel 2: 19, Nivel 3: 24, Nivel 5: 38, Nivel 10: 103, Nivel 20: 450
  */
 export function calculateCosmosRequired(level: number): number {
-  return PLAYER_CONFIG.BASE_COSMOS_REQUIRED + ((level - 1) * PLAYER_CONFIG.COSMOS_INCREMENT_PER_LEVEL);
+  // Fórmula exponencial: base + (incremento * nivel^1.45) - curva más agresiva
+  const exponentialCost = PLAYER_CONFIG.BASE_COSMOS_REQUIRED + 
+    Math.floor(PLAYER_CONFIG.COSMOS_INCREMENT_PER_LEVEL * Math.pow(level, 1.45));
+  return exponentialCost;
 }
 
 /**

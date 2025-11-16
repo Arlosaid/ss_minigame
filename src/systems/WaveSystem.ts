@@ -6,8 +6,11 @@ export class WaveSystem {
   private currentWave: number = 0;
   private enemiesSpawned: number = 0;
   private spawnTimer: number = 0;
+  private elapsedTime: number = 0;
+  private firstMinibossSpawned: boolean = false;
   private arenaWidth: number;
   private arenaHeight: number;
+  private readonly FIRST_MINIBOSS_TIME = 120; // segundos (2 minutos)
 
   constructor(arenaWidth: number, arenaHeight: number) {
     this.arenaWidth = arenaWidth;
@@ -29,6 +32,7 @@ export class WaveSystem {
   }
 
   update(deltaTime: number, currentEnemies: Enemy[]): Enemy[] {
+    this.elapsedTime += deltaTime;
     const waveConfig = this.getWaveConfig(this.currentWave);
     const newEnemies: Enemy[] = [];
 
@@ -44,6 +48,14 @@ export class WaveSystem {
       if (enemy) {
         newEnemies.push(enemy);
         this.enemiesSpawned++;
+      }
+    }
+
+    if (!this.firstMinibossSpawned && this.elapsedTime >= this.FIRST_MINIBOSS_TIME) {
+      const miniboss = this.spawnSpecificEnemy('miniboss', waveConfig.difficultyMultiplier);
+      if (miniboss) {
+        newEnemies.push(miniboss);
+        this.firstMinibossSpawned = true;
       }
     }
 
@@ -67,6 +79,14 @@ export class WaveSystem {
       spawnPos,
       waveConfig.difficultyMultiplier
     );
+  }
+
+  private spawnSpecificEnemy(
+    enemyType: EnemyType,
+    difficultyMultiplier: number
+  ): Enemy | null {
+    const spawnPos = this.getSpawnPosition();
+    return EnemyFactory.createEnemy(enemyType, spawnPos, difficultyMultiplier);
   }
 
   private selectEnemyType(
@@ -120,7 +140,10 @@ export class WaveSystem {
       enemyTypes.push({ type: 'tank', weight: 15 });
     }
 
-    if (wave % 5 === 0) {
+    const canSpawnMiniboss =
+      this.firstMinibossSpawned || this.elapsedTime >= this.FIRST_MINIBOSS_TIME;
+
+    if (wave % 5 === 0 && canSpawnMiniboss) {
       enemyTypes.push({ type: 'miniboss', weight: 10 });
     }
 

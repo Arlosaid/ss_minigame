@@ -106,64 +106,64 @@ export class EnemyFactory {
   private static getEnemyConfig(type: EnemyType) {
     const configs = {
       melee: {
-        hp: 50,
+        hp: 50, // One-shot con daño base del jugador (50)
         damage: 10,
-        speed: 150,
+        speed: 130, // ↓ de 150 - más lento que jugador para kiting
         attackRange: 30,
         attackSpeed: 1.5,
         size: 20,
         movePattern: 'chase' as MovePattern,
-        rewardValue: 10
+        rewardValue: 5 // Aumentado para compensar niveles más lentos
       },
       fast: {
-        hp: 30,
+        hp: 40, // One-shot inicial (era 30)
         damage: 8,
-        speed: 250,
+        speed: 200, // ↓ de 250 - rápido pero esquivable
         attackRange: 25,
         attackSpeed: 2.0,
         size: 15,
         movePattern: 'zigzag' as MovePattern,
-        rewardValue: 15
+        rewardValue: 7 // Aumentado para compensar niveles más lentos
       },
       tank: {
-        hp: 200,
+        hp: 120, // Requiere 3 golpes iniciales (era 200)
         damage: 20,
         speed: 80,
         attackRange: 35,
         attackSpeed: 0.8,
         size: 30,
         movePattern: 'chase' as MovePattern,
-        rewardValue: 30
+        rewardValue: 12 // Aumentado para compensar niveles más lentos
       },
       ranged: {
-        hp: 40,
+        hp: 40, // One-shot inicial
         damage: 12,
         speed: 100,
         attackRange: 200,
         attackSpeed: 1.0,
         size: 18,
         movePattern: 'strafe' as MovePattern,
-        rewardValue: 20
+        rewardValue: 9 // Aumentado para compensar niveles más lentos
       },
       miniboss: {
-        hp: 500,
+        hp: 500, // Mini-boss con HP moderado
         damage: 30,
         speed: 120,
         attackRange: 50,
         attackSpeed: 1.2,
         size: 40,
         movePattern: 'circle' as MovePattern,
-        rewardValue: 100
+        rewardValue: 50 // Reducido para progresión más lenta (era 100)
       },
       boss: {
-        hp: 2000,
+        hp: 2000, // Boss con HP alto
         damage: 50,
         speed: 100,
         attackRange: 60,
         attackSpeed: 1.5,
         size: 60,
         movePattern: 'circle' as MovePattern,
-        rewardValue: 500
+        rewardValue: 200 // Reducido para progresión más lenta (era 500)
       }
     };
 
